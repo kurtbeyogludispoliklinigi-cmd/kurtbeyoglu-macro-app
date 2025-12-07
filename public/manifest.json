@@ -1,0 +1,43 @@
+{
+    "name": "DentistNote Pro",
+    "short_name": "DentistNote",
+    "description": "Bulut tabanlı diş kliniği yönetim sistemi",
+    "start_url": "/",
+    "display": "standalone",
+    "orientation": "portrait",
+    "background_color": "#ffffff",
+    "theme_color": "#0d9488",
+    "categories": [
+        "medical",
+        "productivity",
+        "business"
+    ],
+    "icons": [
+        {
+            "src": "/icon.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/icon.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "Yeni Hasta",
+            "short_name": "Hasta Ekle",
+            "description": "Yeni hasta karti olustur",
+            "url": "/?action=new-patient",
+            "icons": [
+                {
+                    "src": "/icon.png",
+                    "sizes": "96x96"
+                }
+            ]
+        }
+    ]
+}

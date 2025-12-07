@@ -1,0 +1,801 @@
+'use client';
+
+import { useState, useEffect, useMemo } from 'react';
+import { supabase } from '@/lib/supabase';
+import {
+  User, Users, Lock, LogOut, Shield, Plus, Search, Trash2,
+  Save, RefreshCcw, Phone, Activity, Clock, Cloud, WifiOff, Edit, LayoutDashboard, Calendar
+} from 'lucide-react';
+import { clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+import AIAssistant from '@/components/AIAssistant';
+import { useToast } from '@/hooks/useToast';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import Dashboard from '@/components/Dashboard';
+import { VoiceInput } from '@/components/VoiceInput';
+import { PatientReportButton } from '@/components/ReportExport';
+import { useAppointments, Appointment } from '@/hooks/useAppointments';
+import { AppointmentModal } from '@/components/AppointmentModal';
+import { AppointmentList } from '@/components/AppointmentList';
+
+// Helper for classes
+function cn(...inputs: (string | undefined | null | false)[]) {
+  return twMerge(clsx(inputs));
+}
+
+// --- TYPES ---
+interface Doctor {
+  id: string;
+  name: string;
+  role: string;
+  pin: string;
+}
+
+interface Patient {
+  id: string;
+  doctor_id: string;
+  doctor_name: string;
+  name: string;
+  phone: string;
+  anamnez: string;
+  updated_at: string;
+  treatments?: Treatment[];
+}
+
+interface Treatment {
+  id: string;
+  patient_id: string;
+  tooth_no: string;
+  procedure: string;
+  cost: number;
+  notes: string;
+  created_at: string;
+  added_by: string;
+}
+
+// --- ICON COMPONENT (Wrapper for compatibility if needed, using lucide direct mostly) ---
+// We will use Lucide icons directly in the code for better tree-shaking and standard usage.
+
+export default function Home() {
+  const { toast } = useToast();
+
+  // Appointments - moved here but will be used conditionally
+  const [appointmentDate, setAppointmentDate] = useState(new Date());
+
+  // --- STATE ---
+  const [users, setUsers] = useState<Doctor[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [treatments, setTreatments] = useState<Treatment[]>([]);
+
+  const [currentUser, setCurrentUser] = useState<Doctor | null>(null);
+  const [loginPin, setLoginPin] = useState('');
+  const [selectedLoginUser, setSelectedLoginUser] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [dbError, setDbError] = useState(false);
+
+  // Selection
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Modals
+  const [showAddPatientModal, setShowAddPatientModal] = useState(false);
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+
+  // View Toggle
+  const [activeTab, setActiveTab] = useState<'patients' | 'dashboard' | 'appointments'>('patients');
+
+  // Forms
+  const [newPatient, setNewPatient] = useState({ name: '', phone: '', anamnez: '' });
+  const [newTreatment, setNewTreatment] = useState({ toothNo: '', procedure: '', cost: '', notes: '' });
+  const [newDoctor, setNewDoctor] = useState({ name: '', pin: '' });
+  const [editingDoctorId, setEditingDoctorId] = useState<string | null>(null);
+
+  // --- FETCHING ---
+  const fetchData = async () => {
+    if (!supabase) { setDbError(true); return; }
+    setLoading(true);
+    try {
+      const { data: doctorsData, error: docError } = await supabase.from('doctors').select('*');
+      if (docError) throw docError;
+      setUsers(doctorsData || []);
+
+      const { data: patientsData, error: patError } = await supabase.from('patients').select('*').order('updated_at', { ascending: false });
+      if (patError) throw patError;
+      setPatients(patientsData || []);
+
+      const { data: treatmentsData, error: treatError } = await supabase.from('treatments').select('*').order('created_at', { ascending: false });
+      if (treatError) throw treatError;
+      setTreatments(treatmentsData || []);
+
+      setDbError(false);
+    } catch (error) {
+      console.error("Fetch Error:", error);
+      toast({ type: 'error', message: 'Veritabanı hatası. Konsolu kontrol edin.' });
+      setDbError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+
+    const channel = supabase.channel('schema-db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+        console.log('Realtime change detected');
+        fetchData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // --- FILTERING ---
+  const patientsWithTreatments = useMemo(() => {
+    return patients.map(p => ({
+      ...p,
+      treatments: treatments.filter(t => t.patient_id === p.id)
+    }));
+  }, [patients, treatments]);
+
+  const filteredPatients = useMemo(() => {
+    let list = patientsWithTreatments;
+    if (currentUser && currentUser.role !== 'admin') {
+      list = list.filter(p => p.doctor_id === currentUser.id);
+    }
+    return list.filter(p =>
+      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.phone && p.phone.includes(searchTerm))
+    );
+  }, [patientsWithTreatments, searchTerm, currentUser]);
+
+  const activePatient = patientsWithTreatments.find(p => p.id === selectedPatientId);
+
+  // --- HANDLERS ---
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const user = users.find(u => u.id === selectedLoginUser);
+    if (user && user.pin === loginPin) {
+      setCurrentUser(user);
+      setLoginPin('');
+    } else {
+      toast({ type: 'error', message: 'Hatalı PIN!' });
+    }
+  };
+
+  const handleSaveDoctor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDoctor.name || !newDoctor.pin) return;
+    setLoading(true);
+
+    if (editingDoctorId) {
+      const { error } = await supabase.from('doctors').update({
+        name: newDoctor.name,
+        pin: newDoctor.pin
+      }).eq('id', editingDoctorId);
+      if (error) toast({ type: 'error', message: error.message });
+      else {
+        setEditingDoctorId(null);
+        setNewDoctor({ name: '', pin: '' });
+        toast({ type: 'success', message: 'Hekim güncellendi!' });
+        fetchData();
+      }
+    } else {
+      const { error } = await supabase.from('doctors').insert({
+        name: newDoctor.name,
+        role: 'doctor',
+        pin: newDoctor.pin
+      });
+      if (error) toast({ type: 'error', message: error.message });
+      else {
+        setNewDoctor({ name: '', pin: '' });
+        toast({ type: 'success', message: 'Yeni hekim eklendi!' });
+        fetchData();
+      }
+    }
+    setLoading(false);
+  };
+
+  const handleDeleteDoctor = async (id: string) => {
+    if (!confirm('Hekimi sil?')) return;
+    setLoading(true);
+    const { error } = await supabase.from('doctors').delete().eq('id', id);
+    if (error) toast({ type: 'error', message: error.message });
+    else {
+      toast({ type: 'success', message: 'Hekim silindi.' });
+      fetchData();
+    }
+    setLoading(false);
+  };
+
+  const handleAddPatient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) return;
+    setLoading(true);
+    const { data, error } = await supabase.from('patients').insert({
+      doctor_id: currentUser.id,
+      doctor_name: currentUser.name,
+      name: newPatient.name,
+      phone: newPatient.phone,
+      anamnez: newPatient.anamnez
+    }).select();
+
+    if (error) toast({ type: 'error', message: error.message });
+    else {
+      setNewPatient({ name: '', phone: '', anamnez: '' });
+      setShowAddPatientModal(false);
+      if (data && data[0]) setSelectedPatientId(data[0].id);
+      toast({ type: 'success', message: 'Yeni hasta eklendi!' });
+      fetchData();
+    }
+    setLoading(false);
+  };
+
+  const handleDeletePatient = async (id: string) => {
+    if (!confirm('Silmek istediğine emin misin?')) return;
+    setLoading(true);
+    const { error } = await supabase.from('patients').delete().eq('id', id);
+    if (error) toast({ type: 'error', message: error.message });
+    else {
+      if (selectedPatientId === id) setSelectedPatientId(null);
+      toast({ type: 'success', message: 'Hasta silindi.' });
+      fetchData();
+    }
+    setLoading(false);
+  };
+
+  const handleAddTreatment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !selectedPatientId) return;
+    setLoading(true);
+    const { error } = await supabase.from('treatments').insert({
+      patient_id: selectedPatientId,
+      tooth_no: newTreatment.toothNo,
+      procedure: newTreatment.procedure,
+      cost: Number(newTreatment.cost) || 0,
+      notes: newTreatment.notes,
+      added_by: currentUser.name
+    });
+
+    if (error) toast({ type: 'error', message: error.message });
+    else {
+      setNewTreatment({ toothNo: '', procedure: '', cost: '', notes: '' });
+      await supabase.from('patients').update({ updated_at: new Date().toISOString() }).eq('id', selectedPatientId);
+      toast({ type: 'success', message: 'İşlem kaydedildi!' });
+      fetchData();
+    }
+    setLoading(false);
+  };
+
+  const handleDeleteTreatment = async (id: string) => {
+    if (!confirm('Sil?')) return;
+    setLoading(true);
+    const { error } = await supabase.from('treatments').delete().eq('id', id);
+    if (error) toast({ type: 'error', message: error.message });
+    else {
+      toast({ type: 'success', message: 'İşlem silindi.' });
+      fetchData();
+    }
+    setLoading(false);
+  };
+
+
+  // --- RENDER ---
+
+  // 1. Error State
+  if (dbError) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center p-4 bg-gray-100 text-center">
+        <div className="bg-white p-8 rounded-xl shadow-lg max-w-lg">
+          <Cloud className="mx-auto text-red-500 mb-4" size={48} />
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Supabase Bağlantı Hatası</h2>
+          <p className="text-gray-600 mb-4">Lütfen .env.local dosyasındaki ayarları kontrol edin.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Login Screen
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm relative">
+          {loading && <div className="absolute top-4 right-4"><div className="w-5 h-5 border-2 border-teal-600 border-t-transparent rounded-full animate-spin"></div></div>}
+          <div className="text-center mb-8">
+            <div className="bg-teal-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Cloud size={32} className="text-teal-600" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-800">DentistNote Bulut</h1>
+            <p className="text-gray-500 text-sm">Online Klinik Sistemi (v2.0 AI)</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Kullanıcı Seçin</label>
+              <select
+                className="w-full p-3 border rounded-lg bg-gray-50 focus:ring-2 focus:ring-teal-500 outline-none"
+                value={selectedLoginUser}
+                onChange={(e) => setSelectedLoginUser(e.target.value)}
+                required
+                disabled={loading}
+              >
+                <option value="">Seçiniz...</option>
+                {users.map(u => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Giriş Şifresi (PIN)</label>
+              <input
+                type="password"
+                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-center tracking-widest text-lg"
+                placeholder="****"
+                value={loginPin}
+                onChange={(e) => setLoginPin(e.target.value)}
+                maxLength={6}
+                required
+              />
+            </div>
+
+            <button disabled={loading} type="submit" className="w-full bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 transition shadow-lg disabled:opacity-50">
+              {loading ? 'Yükleniyor...' : 'Giriş Yap'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Main Screen
+  return (
+    <div className="flex h-screen overflow-hidden text-gray-800 bg-gray-50">
+
+      {/* SIDEBAR */}
+      <div className="w-full md:w-1/3 lg:w-1/4 bg-white border-r flex flex-col z-10 shadow-lg relative h-full">
+        {loading && <div className="absolute top-0 left-0 w-full h-1 bg-teal-100"><div className="h-full bg-teal-500 animate-pulse w-1/2"></div></div>}
+
+        {/* Header */}
+        <div className={cn("p-4 text-white flex justify-between items-center shadow-md", currentUser.role === 'admin' ? 'bg-indigo-600' : 'bg-teal-600')}>
+          <div>
+            <h1 className="font-bold text-lg flex items-center gap-2">
+              {currentUser.role === 'admin' ? <Shield size={18} /> : <Activity size={18} />}
+              {currentUser.name}
+            </h1>
+            <p className="text-xs text-white opacity-80 flex items-center gap-1">
+              <Cloud size={10} /> Online Mod
+            </p>
+          </div>
+          <div className="flex gap-1">
+            <ThemeToggle />
+            <button onClick={fetchData} className="p-2 hover:bg-white/20 rounded-full transition" title="Yenile">
+              <RefreshCcw size={18} />
+            </button>
+            <button onClick={() => setCurrentUser(null)} className="p-2 hover:bg-white/20 rounded-full transition" title="Çıkış Yap">
+              <LogOut size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* Admin Button */}
+        {currentUser.role === 'admin' && (
+          <div className="p-2 bg-indigo-50 border-b">
+            <button onClick={() => setShowAddUserModal(true)} className="flex items-center justify-center gap-2 w-full p-2 bg-white border border-indigo-200 rounded hover:bg-indigo-100 text-indigo-700 font-medium text-sm transition">
+              <Users size={16} /> Hekim Yönetimi
+            </button>
+          </div>
+        )}
+
+        {/* Tab Toggle */}
+        <div className="p-2 bg-gray-100 dark:bg-slate-700 border-b flex gap-1">
+          <button
+            onClick={() => setActiveTab('patients')}
+            className={cn(
+              "flex-1 py-2 px-2 rounded-lg font-medium text-xs flex items-center justify-center gap-1 transition",
+              activeTab === 'patients'
+                ? "bg-white dark:bg-slate-800 shadow text-teal-600"
+                : "text-gray-500 hover:bg-white/50"
+            )}
+          >
+            <Users size={14} /> Hastalar
+          </button>
+          <button
+            onClick={() => setActiveTab('appointments')}
+            className={cn(
+              "flex-1 py-2 px-2 rounded-lg font-medium text-xs flex items-center justify-center gap-1 transition",
+              activeTab === 'appointments'
+                ? "bg-white dark:bg-slate-800 shadow text-teal-600"
+                : "text-gray-500 hover:bg-white/50"
+            )}
+          >
+            <Calendar size={14} /> Randevular
+          </button>
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={cn(
+              "flex-1 py-2 px-2 rounded-lg font-medium text-xs flex items-center justify-center gap-1 transition",
+              activeTab === 'dashboard'
+                ? "bg-white dark:bg-slate-800 shadow text-teal-600"
+                : "text-gray-500 hover:bg-white/50"
+            )}
+          >
+            <LayoutDashboard size={14} /> Dashboard
+          </button>
+        </div>
+
+        {/* Search & Add Patient */}
+        {activeTab === 'patients' && (
+          <div className="p-4 border-b space-y-3 bg-gray-50 dark:bg-slate-800">
+            <div className="relative">
+              <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+              <input
+                type="text"
+                placeholder={currentUser.role === 'admin' ? "Tüm hastalarda ara..." : "Kendi hastalarında ara..."}
+                className="w-full pl-10 pr-4 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:ring-teal-500 transition bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <button
+              onClick={() => setShowAddPatientModal(true)}
+              className="w-full bg-teal-600 text-white py-2 rounded-lg font-medium hover:bg-teal-700 transition flex justify-center items-center gap-2 shadow-sm"
+            >
+              <Plus size={18} /> Yeni Hasta Ekle
+            </button>
+          </div>
+        )}
+
+        {/* Patient List or Dashboard or Appointments */}
+        <div className="flex-1 overflow-y-auto">
+          {activeTab === 'dashboard' ? (
+            <Dashboard
+              patients={patients}
+              treatments={treatments}
+              doctors={users}
+              currentUser={currentUser}
+            />
+          ) : activeTab === 'appointments' ? (
+            <AppointmentsTab
+              currentUser={currentUser}
+              patients={patients}
+              selectedDate={appointmentDate}
+              onDateChange={setAppointmentDate}
+              toast={toast}
+            />
+          ) : (
+            <>
+              {filteredPatients.length === 0 ? (
+                <div className="text-center p-8 text-gray-400">
+                  <p>Kayıt bulunamadı.</p>
+                </div>
+              ) : (
+                <ul>
+                  {filteredPatients.map(p => (
+                    <li
+                      key={p.id}
+                      onClick={() => setSelectedPatientId(p.id)}
+                      className={cn("p-4 border-b cursor-pointer hover:bg-teal-50 dark:hover:bg-slate-700 transition relative", selectedPatientId === p.id && 'bg-teal-50 dark:bg-slate-700 border-l-4 border-l-teal-600')}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-semibold text-gray-800 dark:text-gray-100">{p.name}</h3>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-1">
+                            <Phone size={12} /> {p.phone || 'Tel yok'}
+                          </p>
+                          {currentUser.role === 'admin' && (
+                            <span className="text-[10px] bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded mt-1 inline-block">
+                              Hekim: {p.doctor_name || 'Bilinmiyor'}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          {p.updated_at && (
+                            <span className="text-xs bg-gray-100 dark:bg-slate-600 text-gray-500 dark:text-gray-300 px-2 py-1 rounded-full">
+                              {new Date(p.updated_at).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* DETAIL PANEL */}
+      <div className="flex-1 bg-gray-50 flex flex-col h-full overflow-hidden relative">
+        {activePatient ? (
+          <>
+            {/* Patient Header */}
+            <div className="bg-white p-6 shadow-sm border-b flex justify-between items-start">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
+                  {activePatient.name}
+                </h2>
+                <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-600">
+                  <span className="flex items-center gap-1 bg-gray-100 px-3 py-1 rounded-full">
+                    <Phone size={14} /> {activePatient.phone}
+                  </span>
+                  <span className="flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-100 px-3 py-1 rounded-full">
+                    <User size={14} /> Hekim: {activePatient.doctor_name}
+                  </span>
+                </div>
+                {activePatient.anamnez && (
+                  <div className="mt-3 p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-100 inline-block">
+                    <strong>⚠️ Anamnez:</strong> {activePatient.anamnez}
+                  </div>
+                )}
+              </div>
+
+              {(currentUser.role === 'admin' || activePatient.doctor_id === currentUser.id) && (
+                <div className="flex items-center gap-2">
+                  <PatientReportButton patient={activePatient} treatments={activePatient.treatments || []} />
+                  <button
+                    onClick={() => handleDeletePatient(activePatient.id)}
+                    className="text-gray-400 hover:text-red-500 transition p-2"
+                    title="Hastayı Sil"
+                  >
+                    <Trash2 size={20} />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6 pb-24">
+
+              {(currentUser.role === 'admin' || activePatient.doctor_id === currentUser.id) && (
+                <div className="bg-white p-5 rounded-xl shadow-sm border mb-6">
+                  <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                    <div className="bg-teal-100 p-1.5 rounded text-teal-700"><Plus size={18} /></div>
+                    Yeni İşlem Ekle
+                  </h3>
+                  <form onSubmit={handleAddTreatment} className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Diş No</label>
+                      <input type="text" placeholder="16" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none" value={newTreatment.toothNo} onChange={e => setNewTreatment({ ...newTreatment, toothNo: e.target.value })} />
+                    </div>
+                    <div className="md:col-span-4">
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Yapılan İşlem</label>
+                      <input type="text" placeholder="Kanal Tedavisi" required className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none" value={newTreatment.procedure} onChange={e => setNewTreatment({ ...newTreatment, procedure: e.target.value })} />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Ücret (TL)</label>
+                      <input type="number" placeholder="0.00" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none" value={newTreatment.cost} onChange={e => setNewTreatment({ ...newTreatment, cost: e.target.value })} />
+                    </div>
+                    <div className="md:col-span-4">
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Notlar</label>
+                      <div className="flex gap-2">
+                        <input type="text" placeholder="Detay..." className="flex-1 p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none" value={newTreatment.notes} onChange={e => setNewTreatment({ ...newTreatment, notes: e.target.value })} />
+                        <VoiceInput onTranscript={(text) => setNewTreatment({ ...newTreatment, notes: newTreatment.notes + ' ' + text })} />
+                      </div>
+                    </div>
+                    <div className="md:col-span-12 flex justify-end">
+                      <button type="submit" disabled={loading} className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition shadow-sm font-medium disabled:opacity-50">
+                        {loading ? '...' : 'Kaydet'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              <h3 className="text-lg font-semibold text-gray-700 mb-4 px-1">Tedavi Geçmişi</h3>
+              {!activePatient.treatments || activePatient.treatments.length === 0 ? (
+                <div className="text-center py-10 bg-white rounded-xl border border-dashed">
+                  <p className="text-gray-400">Henüz işlem kaydı yok.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {activePatient.treatments.map((t) => (
+                    <div key={t.id} className="bg-white p-4 rounded-xl border shadow-sm hover:shadow-md transition relative group">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex gap-3 items-center">
+                          {t.tooth_no && (
+                            <div className="bg-blue-50 text-blue-700 font-bold px-3 py-1 rounded-md border border-blue-100">
+                              #{t.tooth_no}
+                            </div>
+                          )}
+                          <h4 className="font-bold text-gray-800 text-lg">{t.procedure}</h4>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs text-gray-400 flex items-center gap-1 justify-end">
+                            <Clock size={12} /> {new Date(t.created_at).toLocaleDateString()}
+                          </div>
+                          {t.cost && <div className="text-teal-600 font-bold mt-1">{t.cost} ₺</div>}
+                        </div>
+                      </div>
+                      {t.notes && <p className="text-gray-600 text-sm mt-2 bg-gray-50 p-2 rounded block">{t.notes}</p>}
+
+                      {(currentUser.role === 'admin' || activePatient.doctor_id === currentUser.id) && (
+                        <button
+                          onClick={() => handleDeleteTreatment(t.id)}
+                          className="absolute bottom-4 right-4 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full text-center text-gray-400 p-8">
+            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+              <User size={48} className="text-gray-300" />
+            </div>
+            <h2 className="text-xl font-medium text-gray-600">Hasta Seçilmedi</h2>
+            <p className="mt-2">İşlem yapmak için soldan bir hasta seçin.</p>
+          </div>
+        )}
+      </div>
+
+      {/* MODALS */}
+      {showAddPatientModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-gray-800">Yeni Hasta Kartı</h3>
+              <button onClick={() => setShowAddPatientModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            <form onSubmit={handleAddPatient} className="space-y-4">
+              <input type="text" required placeholder="Ad Soyad" className="w-full p-3 border rounded-lg" value={newPatient.name} onChange={e => setNewPatient({ ...newPatient, name: e.target.value })} />
+              <input type="tel" placeholder="Telefon" className="w-full p-3 border rounded-lg" value={newPatient.phone} onChange={e => setNewPatient({ ...newPatient, phone: e.target.value })} />
+              <textarea placeholder="Anamnez..." className="w-full p-3 border border-red-200 bg-red-50 rounded-lg" rows={3} value={newPatient.anamnez} onChange={e => setNewPatient({ ...newPatient, anamnez: e.target.value })}></textarea>
+              <button type="submit" disabled={loading} className="w-full bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700">{loading ? '...' : 'Kaydet'}</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showAddUserModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-indigo-800">Hekim Yönetimi</h3>
+              <button onClick={() => { setShowAddUserModal(false); }} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+
+            <form onSubmit={handleSaveDoctor} className="space-y-4 bg-gray-50 p-4 rounded-lg mb-6 border">
+              <div className="text-sm font-bold text-gray-700 mb-2">{editingDoctorId ? 'Hekimi Düzenle' : 'Yeni Hekim Ekle'}</div>
+              <div className="grid grid-cols-2 gap-4">
+                <input type="text" required placeholder="Dr. Adı Soyadı" className="w-full p-3 border rounded-lg" value={newDoctor.name} onChange={e => setNewDoctor({ ...newDoctor, name: e.target.value })} />
+                <input type="text" required placeholder="PIN" className="w-full p-3 border rounded-lg" value={newDoctor.pin} onChange={e => setNewDoctor({ ...newDoctor, pin: e.target.value })} />
+              </div>
+              <div className="flex gap-2">
+                <button type="submit" disabled={loading} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700 shadow-sm">{loading ? '...' : (editingDoctorId ? 'Güncelle' : 'Ekle')}</button>
+                {editingDoctorId && <button type="button" onClick={() => { setEditingDoctorId(null); setNewDoctor({ name: '', pin: '' }); }} className="px-4 py-2 bg-gray-300 rounded-lg hover:bg-gray-400 font-medium">İptal</button>}
+              </div>
+            </form>
+
+            <div>
+              <h4 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                <Users size={16} className="text-gray-500" /> Mevcut Hekimler
+              </h4>
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {users.filter(u => u.role !== 'admin').length === 0 && <p className="text-sm text-gray-400 italic">Henüz kayıtlı hekim yok.</p>}
+                {users.filter(u => u.role !== 'admin').map(doctor => (
+                  <div key={doctor.id} className="flex justify-between items-center p-3 bg-white border rounded-lg hover:shadow-sm transition group">
+                    <div>
+                      <span className="font-medium text-gray-800 block">{doctor.name}</span>
+                      <span className="text-xs text-gray-400 font-mono tracking-wider">PIN: {doctor.pin}</span>
+                    </div>
+                    <div className="flex gap-2 opacity-80 group-hover:opacity-100 transition">
+                      <button onClick={() => { setEditingDoctorId(doctor.id); setNewDoctor({ name: doctor.name, pin: doctor.pin }); }} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-full transition" title="Düzenle">
+                        <Edit size={16} />
+                      </button>
+                      <button onClick={() => handleDeleteDoctor(doctor.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-full transition" title="Sil">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AIAssistant />
+    </div>
+  );
+}
+
+// Appointments Tab Component
+interface AppointmentsTabProps {
+  currentUser: Doctor;
+  patients: Patient[];
+  selectedDate: Date;
+  onDateChange: (date: Date) => void;
+  toast: (options: { type: 'success' | 'error' | 'warning' | 'info'; message: string }) => void;
+}
+
+function AppointmentsTab({ currentUser, patients, selectedDate, onDateChange, toast }: AppointmentsTabProps) {
+  const [showModal, setShowModal] = useState(false);
+  const [editingApt, setEditingApt] = useState<Appointment | null>(null);
+
+  const {
+    appointments,
+    loading,
+    addAppointment,
+    updateAppointment,
+    deleteAppointment
+  } = useAppointments({
+    doctorId: currentUser.role === 'admin' ? undefined : currentUser.id,
+    date: selectedDate
+  });
+
+  const handleSave = async (data: Parameters<typeof addAppointment>[0]) => {
+    if (editingApt) {
+      const result = await updateAppointment(editingApt.id, data);
+      if (result.success) {
+        toast({ type: 'success', message: 'Randevu güncellendi!' });
+        setEditingApt(null);
+      } else {
+        toast({ type: 'error', message: result.error || 'Hata oluştu' });
+      }
+      return result;
+    } else {
+      const result = await addAppointment(data);
+      if (result.success) {
+        toast({ type: 'success', message: 'Randevu oluşturuldu!' });
+      } else {
+        toast({ type: 'error', message: result.error || 'Hata oluştu' });
+      }
+      return result;
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    const result = await deleteAppointment(id);
+    if (result.success) {
+      toast({ type: 'success', message: 'Randevu silindi.' });
+    } else {
+      toast({ type: 'error', message: result.error || 'Hata oluştu' });
+    }
+  };
+
+  const handleStatusChange = async (id: string, status: Appointment['status']) => {
+    const result = await updateAppointment(id, { status });
+    if (result.success) {
+      toast({ type: 'success', message: 'Durum güncellendi!' });
+    }
+  };
+
+  return (
+    <>
+      <AppointmentList
+        appointments={appointments}
+        onEdit={(apt) => { setEditingApt(apt); setShowModal(true); }}
+        onDelete={handleDelete}
+        onStatusChange={handleStatusChange}
+        onAddNew={() => { setEditingApt(null); setShowModal(true); }}
+        selectedDate={selectedDate}
+        onDateChange={onDateChange}
+        loading={loading}
+      />
+      <AppointmentModal
+        isOpen={showModal}
+        onClose={() => { setShowModal(false); setEditingApt(null); }}
+        onSave={handleSave}
+        patients={patients}
+        doctorId={currentUser.id}
+        existingAppointment={editingApt ? {
+          id: editingApt.id,
+          patient_id: editingApt.patient_id,
+          appointment_date: editingApt.appointment_date,
+          duration_minutes: editingApt.duration_minutes,
+          notes: editingApt.notes,
+          status: editingApt.status,
+        } : undefined}
+      />
+    </>
+  );
+}
