@@ -1,36 +1,115 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🦷 DentistNote Pro - Diş Klinik Yönetim Sistemi
 
-## Getting Started
+**Diş hekimleri için geliştirilen, hastalarınızı ve tedavilerinizi kolayca takip etmenizi sağlayan online uygulama.**
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## 📱 Bu Uygulama Ne İşe Yarar?
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+DentistNote Pro, diş kliniklerinde günlük işleri kolaylaştırmak için tasarlanmış bir yazılımdır. İnternet tarayıcınızdan (Chrome, Safari vb.) açarak kullanabilirsiniz - bilgisayar veya telefon fark etmez!
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## ✨ Neler Yapabilirsiniz?
 
-## Learn More
+### 👥 Hasta Yönetimi
+- **Yeni hasta kartı açma** - İsim, telefon ve geçmiş hastalıkları kaydedin
+- **Hasta arama** - İsim veya telefon numarasıyla hızlıca bulun
+- **Hasta listeleme** - Tüm hastalarınızı tarih sırasına göre görün
 
-To learn more about Next.js, take a look at the following resources:
+### 🦷 Tedavi Takibi
+- **İşlem kaydetme** - Hangi dişe ne yaptığınızı kaydedin
+- **Ücret girişi** - Her işlemin fiyatını not edin
+- **Tedavi geçmişi** - Hastanın tüm geçmiş işlemlerini görün
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 📅 Randevu Sistemi
+- **Randevu oluşturma** - Gün ve saat belirleyin
+- **Takvim görünümü** - Günlük randevularınızı listeleyin
+- **Durum takibi** - Bekliyor, tamamlandı, iptal olarak işaretleyin
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 🤖 Yapay Zeka Asistanı (Gemini)
+Ekranın sağ alt köşesindeki **"Asistan"** butonuna tıklayarak:
+- "Bugün kaç hasta gördüm?"
+- "Bu ay ne kadar ciro yaptım?"
+- "En çok hangi işlemi yapıyorum?"
 
-## Deploy on Vercel
+gibi sorular sorabilirsiniz. Yapay zeka size anında cevap verir!
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 🎤 Sesle Not Alma
+Tedavi notlarını **konuşarak** girebilirsiniz! Mikrofon simgesine tıklayın, konuşun - yazı otomatik oluşur.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 📊 Dashboard (Kontrol Paneli)
+Tek bir ekranda:
+- Bu ayki toplam ciro
+- Kaç hasta görüldü
+- Günlük hasta grafiği
+- En çok yapılan işlemler
+
+### 📄 Rapor Çıktısı
+Her hasta için **PDF rapor** oluşturabilirsiniz - yazdırmak veya e-posta ile göndermek için ideal!
+
+### 🌙 Karanlık Mod
+Göz yormayan karanlık tema seçeneği mevcut - gece çalışanlar için ideal!
+
+---
+
+## 👤 Kullanıcı Tipleri
+
+| Kullanıcı | Yetkisi |
+|-----------|---------|
+| **Admin** | Tüm hastaları görür, hekim ekler/siler, tüm istatistiklere erişir |
+| **Hekim (Doktor)** | Sadece kendi hastalarını görür ve yönetir |
+
+---
+
+## 🔐 Nasıl Giriş Yapılır?
+
+1. Uygulamayı açın
+2. Kullanıcı listesinden isminizi seçin
+3. Size verilen **4-6 haneli PIN şifresini** girin
+4. "Giriş Yap" butonuna tıklayın
+
+---
+
+## 📲 Telefondan Kullanım
+
+Uygulama telefon ve tabletten de rahatlıkla kullanılabilir. Hatta ana ekrana ekleyerek normal bir uygulama gibi açabilirsiniz!
+
+**iPhone için:**
+1. Safari'de uygulamayı açın
+2. Paylaş butonuna (kutu + ok) tıklayın
+3. "Ana Ekrana Ekle" seçin
+
+**Android için:**
+1. Chrome'da uygulamayı açın
+2. Üç nokta menüsüne tıklayın
+3. "Ana ekrana ekle" seçin
+
+---
+
+## ⚡ Önemli Bilgiler
+
+- 📡 **İnternet gerekli** - Veriler bulutta saklanır
+- 🔄 **Anlık güncelleme** - Başka biri veri eklerse anında görürsünüz
+- 💾 **Otomatik kayıt** - Kaydet butonuna bastığınızda anında kaydedilir
+- 🔒 **Güvenli** - Şifre ile korumalı
+
+---
+
+## 🆘 Sorun Mu Yaşıyorsunuz?
+
+| Sorun | Çözüm |
+|-------|-------|
+| Giriş yapamıyorum | PIN şifresini kontrol edin |
+| Sayfa açılmıyor | İnternet bağlantınızı kontrol edin |
+| Veri görünmüyor | Sağ üstteki yenile butonuna (↻) tıklayın |
+
+---
+
+## 📞 İletişim
+
+Teknik destek için uygulama yöneticinize başvurun.
+
+---
+
+*DentistNote Pro v2.0 - Klinik Yönetim Sistemi*
