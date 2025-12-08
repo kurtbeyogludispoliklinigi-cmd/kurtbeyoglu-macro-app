@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   User, Users, Lock, LogOut, Shield, Plus, Search, Trash2,
@@ -89,80 +89,125 @@ export default function Home() {
 
   // Forms
   const [newPatient, setNewPatient] = useState({ name: '', phone: '', anamnez: '' });
+  const [showEditPatientModal, setShowEditPatientModal] = useState(false);
+  const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [newTreatment, setNewTreatment] = useState({ toothNo: '', procedure: '', cost: '', notes: '' });
   const [newDoctor, setNewDoctor] = useState({ name: '', pin: '' });
   const [editingDoctorId, setEditingDoctorId] = useState<string | null>(null);
 
   // --- FETCHING ---
-  const fetchData = async () => {
-    if (!supabase) { setDbError(true); return; }
+  // --- FETCHING ---
+  const fetchData = async (overrideUser?: Doctor) => {
+    // Use the passed user or current user, but if neither, do not fetch sensitive data
+    const activeUser = overrideUser || currentUser;
+    if (!supabase || !activeUser) return;
+
     setLoading(true);
     try {
-      const { data: doctorsData, error: docError } = await supabase.from('doctors').select('*');
-      if (docError) throw docError;
-      setUsers(doctorsData || []);
+      // 1. Doctors (Public/All needed for login selection, maybe restrict later if strict privacy needed, but names are usually public)
+      // Actually, we need doctors list for the login screen BEFORE we have a user. 
+      // So we separate initial fetch (Doctors) from sensitive fetch (Patients/Treatments).
 
-      const { data: patientsData, error: patError } = await supabase.from('patients').select('*').order('updated_at', { ascending: false });
+      // 2. Patients & Treatments (Private)
+      let patientQuery = supabase.from('patients').select('*').order('updated_at', { ascending: false });
+      let treatmentQuery = supabase.from('treatments').select('*').order('created_at', { ascending: false });
+
+      // If NOT admin, filter strictly
+      if (activeUser.role !== 'admin') {
+        patientQuery = patientQuery.eq('doctor_id', activeUser.id);
+        // For treatments, we need to filter by patient IDs effectively or if treatments table has doctor_id (it doesn't seem to, it has added_by name).
+        // Best approach: Fetch patients first, then fetch treatments for those patients.
+        // OR: Modify treatments schema to include doctor_id. 
+        // Current Schema: treatments has patient_id.
+        // We will fetch treatments after patients.
+      }
+
+      const { data: patientsData, error: patError } = await patientQuery;
       if (patError) throw patError;
       setPatients(patientsData || []);
 
-      const { data: treatmentsData, error: treatError } = await supabase.from('treatments').select('*').order('created_at', { ascending: false });
-      if (treatError) throw treatError;
-      setTreatments(treatmentsData || []);
+      if (patientsData && patientsData.length > 0) {
+        const patientIds = patientsData.map(p => p.id);
+        // Supabase 'in' query for treatments
+        const { data: treatmentsData, error: treatError } = await supabase
+          .from('treatments')
+          .select('*')
+          .in('patient_id', patientIds)
+          .order('created_at', { ascending: false });
+
+        if (treatError) throw treatError;
+        setTreatments(treatmentsData || []);
+      } else {
+        setTreatments([]);
+      }
 
       setDbError(false);
     } catch (error) {
       console.error("Fetch Error:", error);
-      toast({ type: 'error', message: 'Veritabanı hatası. Konsolu kontrol edin.' });
+      toast({ type: 'error', message: 'Veri çekme hatası.' });
       setDbError(true);
     } finally {
       setLoading(false);
     }
   };
 
+  // Initial fetch for doctor list ONLY
   useEffect(() => {
-    fetchData();
+    const fetchDoctors = async () => {
+      try {
+        const { data, error } = await supabase.from('doctors').select('*');
+        if (error) throw error;
+        setUsers(data || []);
+      } catch (e) {
+        console.error(e);
+        setDbError(true);
+      }
+    };
+    fetchDoctors();
 
+    // Listen for changes
     const channel = supabase.channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-        console.log('Realtime change detected');
-        fetchData();
+        if (currentUser) fetchData(currentUser); // Refresh if logged in
       })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [currentUser]); // Re-subscribe if user changes? No, just keep channel open.
+
 
   // --- FILTERING ---
   const patientsWithTreatments = useMemo(() => {
-    return patients.map(p => ({
+    return patients.map((p: Patient) => ({
       ...p,
-      treatments: treatments.filter(t => t.patient_id === p.id)
+      treatments: treatments.filter((t: Treatment) => t.patient_id === p.id)
     }));
   }, [patients, treatments]);
 
   const filteredPatients = useMemo(() => {
     let list = patientsWithTreatments;
     if (currentUser && currentUser.role !== 'admin') {
-      list = list.filter(p => p.doctor_id === currentUser.id);
+      list = list.filter((p: Patient) => p.doctor_id === currentUser.id);
     }
-    return list.filter(p =>
+    return list.filter((p: Patient) =>
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (p.phone && p.phone.includes(searchTerm))
     );
   }, [patientsWithTreatments, searchTerm, currentUser]);
 
-  const activePatient = patientsWithTreatments.find(p => p.id === selectedPatientId);
+  const activePatient = patientsWithTreatments.find((p: Patient) => p.id === selectedPatientId);
 
   // --- HANDLERS ---
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    const user = users.find(u => u.id === selectedLoginUser);
+    const user = users.find((u: Doctor) => u.id === selectedLoginUser);
     if (user && user.pin === loginPin) {
       setCurrentUser(user);
       setLoginPin('');
+      // Trigger fetch for this user
+      fetchData(user);
     } else {
       toast({ type: 'error', message: 'Hatalı PIN!' });
     }
@@ -183,7 +228,8 @@ export default function Home() {
         setEditingDoctorId(null);
         setNewDoctor({ name: '', pin: '' });
         toast({ type: 'success', message: 'Hekim güncellendi!' });
-        fetchData();
+        const { data } = await supabase.from('doctors').select('*');
+        if (data) setUsers(data);
       }
     } else {
       const { error } = await supabase.from('doctors').insert({
@@ -195,7 +241,9 @@ export default function Home() {
       else {
         setNewDoctor({ name: '', pin: '' });
         toast({ type: 'success', message: 'Yeni hekim eklendi!' });
-        fetchData();
+        // Refresh doctors list manually since fetchData(currentUser) might not fetch doctors
+        const { data } = await supabase.from('doctors').select('*');
+        if (data) setUsers(data);
       }
     }
     setLoading(false);
@@ -409,7 +457,7 @@ export default function Home() {
           </div>
           <div className="flex gap-1">
             <ThemeToggle />
-            <button onClick={fetchData} className="p-2 hover:bg-white/20 rounded-full transition" title="Yenile">
+            <button onClick={() => fetchData()} className="p-2 hover:bg-white/20 rounded-full transition" title="Yenile">
               <RefreshCcw size={18} />
             </button>
             <button onClick={() => setCurrentUser(null)} className="p-2 hover:bg-white/20 rounded-full transition" title="Çıkış Yap">
@@ -428,7 +476,7 @@ export default function Home() {
                 {currentUser.role === 'admin' ? 'Yönetici' : 'Hekim'}
               </p>
             </div>
-            <button onClick={fetchData} className="p-2 hover:bg-gray-100 rounded-full transition" title="Yenile">
+            <button onClick={() => fetchData()} className="p-2 hover:bg-gray-100 rounded-full transition" title="Yenile">
               <RefreshCcw size={18} className="text-gray-600" />
             </button>
           </div>
@@ -591,12 +639,21 @@ export default function Home() {
                 <div className="flex items-center gap-2 self-end sm:self-start">
                   <PatientReportButton patient={activePatient} treatments={activePatient.treatments || []} />
                   <button
+                    onClick={() => {
+                      setEditingPatient(activePatient);
+                      setShowEditPatientModal(true);
+                    }}
+                    className="text-gray-400 hover:text-blue-500 transition p-2"
+                    title="Hasta Bilgilerini Düzenle"
+                  >
+                    <Edit size={20} />
+                  </button>
+                  <button
                     onClick={() => handleDeletePatient(activePatient.id)}
                     className="text-gray-400 hover:text-red-500 transition p-2"
                     title="Hastayı Sil"
                   >
                     <Trash2 size={20} />
-                  </button>
                 </div>
               )}
             </div>
@@ -706,6 +763,35 @@ export default function Home() {
               <input type="tel" placeholder="Telefon" className="w-full p-3 border rounded-lg text-base" value={newPatient.phone} onChange={e => setNewPatient({ ...newPatient, phone: e.target.value })} />
               <textarea placeholder="Anamnez..." className="w-full p-3 border border-red-200 bg-red-50 rounded-lg text-base" rows={3} value={newPatient.anamnez} onChange={e => setNewPatient({ ...newPatient, anamnez: e.target.value })}></textarea>
               <button type="submit" disabled={loading} className="w-full bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 text-base">{loading ? '...' : 'Kaydet'}</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showEditPatientModal && editingPatient && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-5 md:p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg md:text-xl font-bold text-gray-800">Hasta Bilgilerini Düzenle</h3>
+              <button onClick={() => { setShowEditPatientModal(false); setEditingPatient(null); }} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            <form onSubmit={handleEditPatient} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ad Soyad</label>
+                <input type="text" required placeholder="Ad Soyad" className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none" value={editingPatient.name} onChange={e => setEditingPatient({ ...editingPatient, name: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Telefon</label>
+                <input type="tel" placeholder="Telefon" className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none" value={editingPatient.phone || ''} onChange={e => setEditingPatient({ ...editingPatient, phone: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Anamnez</label>
+                <textarea placeholder="Anamnez..." className="w-full p-3 border border-red-200 bg-red-50 rounded-lg text-base focus:ring-2 focus:ring-red-300 outline-none" rows={3} value={editingPatient.anamnez || ''} onChange={e => setEditingPatient({ ...editingPatient, anamnez: e.target.value })}></textarea>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => { setShowEditPatientModal(false); setEditingPatient(null); }} className="flex-1 py-3 border rounded-lg font-medium hover:bg-gray-50 text-base">İptal</button>
+                <button type="submit" disabled={loading} className="flex-1 bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 text-base disabled:opacity-50">{loading ? 'Kaydediliyor...' : 'Güncelle'}</button>
+              </div>
             </form>
           </div>
         </div>

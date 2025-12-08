@@ -3,7 +3,7 @@
 
 import { useChat } from '@ai-sdk/react';
 import { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, Sparkles, AlertCircle } from 'lucide-react';
+import { MessageSquare, X, Send, Sparkles, AlertCircle, Mic, Paperclip } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -15,6 +15,40 @@ export default function AIAssistant() {
     const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat();
     const [isOpen, setIsOpen] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const [files, setFiles] = useState<FileList | undefined>(undefined);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [isListening, setIsListening] = useState(false);
+
+    // Voice Recognition Logic
+    const toggleListening = () => {
+        if (isListening) {
+            setIsListening(false);
+            return; // Managed by onend usually, but manual stop here if needed depends on API
+        }
+
+        if (!('webkitSpeechRecognition' in window)) {
+            alert('Tarayıcınız sesli komut özelliğini desteklemiyor.');
+            return;
+        }
+
+        const recognition = new (window as any).webkitSpeechRecognition();
+        recognition.lang = 'tr-TR';
+        recognition.continuous = false;
+        recognition.interimResults = false;
+
+        recognition.onstart = () => setIsListening(true);
+        recognition.onresult = (event: any) => {
+            const transcript = event.results[0][0].transcript;
+            handleInputChange({ target: { value: (input || '') + ' ' + transcript } } as any);
+        };
+        recognition.onerror = (event: any) => {
+            console.error(event.error);
+            setIsListening(false);
+        };
+        recognition.onend = () => setIsListening(false);
+
+        recognition.start();
+    };
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -50,10 +84,10 @@ export default function AIAssistant() {
                                 <Sparkles className="mx-auto text-teal-300" size={32} />
                                 <p>Merhaba! Size nasıl yardımcı olabilirim?</p>
                                 <div className="grid grid-cols-1 gap-2 mt-4 px-4">
-                                    <button className="text-xs bg-white border p-2 rounded hover:bg-teal-50" onClick={() => { /* TODO: pre-fill */ }}>
+                                    <button className="text-xs bg-white border p-2 rounded hover:bg-teal-50" onClick={() => handleInputChange({ target: { value: "Bugünkü randevularım?" } } as any)}>
                                         "Bugünkü randevularım?"
                                     </button>
-                                    <button className="text-xs bg-white border p-2 rounded hover:bg-teal-50">
+                                    <button className="text-xs bg-white border p-2 rounded hover:bg-teal-50" onClick={() => handleInputChange({ target: { value: "Toplam ciromuz ne kadar?" } } as any)}>
                                         "Toplam ciromuz ne kadar?"
                                     </button>
                                 </div>
@@ -76,7 +110,18 @@ export default function AIAssistant() {
                                             : "bg-white border shadow-sm text-gray-800 rounded-tl-none"
                                     )}
                                 >
-                                    {/* Basic markdown rendering can be added here if needed */}
+                                    {/* Display Attachments if any */}
+                                    {m.experimental_attachments?.map((attachment, index) => (
+                                        <div key={index} className="mb-2">
+                                            {attachment.contentType?.startsWith('image/') && (
+                                                <img
+                                                    src={attachment.url}
+                                                    alt="attachment"
+                                                    className="max-w-full rounded-lg max-h-40 object-cover"
+                                                />
+                                            )}
+                                        </div>
+                                    ))}
                                     {m.content}
                                 </div>
                             </div>
@@ -100,22 +145,110 @@ export default function AIAssistant() {
                         )}
                     </div>
 
-                    {/* Input */}
-                    <form onSubmit={handleSubmit} className="p-3 bg-white border-t flex gap-2">
-                        <input
-                            value={input ?? ''}
-                            onChange={handleInputChange}
-                            placeholder="Bir soru sorun..."
-                            className="flex-1 bg-gray-100 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                        />
-                        <button
-                            type="submit"
-                            disabled={isLoading || !(input ?? '').trim()}
-                            className="p-2 bg-teal-600 text-white rounded-full hover:bg-teal-700 disabled:opacity-50 transition"
+                    {/* Input Area */}
+                    <div className="p-3 bg-white border-t space-y-2">
+                        {/* Image Preview */}
+                        {files && files.length > 0 && (
+                            <div className="flex gap-2 overflow-x-auto pb-2">
+                                {Array.from(files).map((file, i) => (
+                                    <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border">
+                                        <img src={URL.createObjectURL(file)} className="w-full h-full object-cover" alt="preview" />
+                                        <button
+                                            onClick={() => setFiles(undefined)}
+                                            className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl"
+                                        >
+                                            <X size={10} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        <form
+                            onSubmit={async (e) => {
+                                e.preventDefault();
+
+                                const currentFiles = files;
+                                setFiles(undefined); // Clear UI immediately
+
+                                let attachments: FileList | undefined | any[] = currentFiles;
+
+                                if (currentFiles && currentFiles.length > 0) {
+                                    attachments = await Promise.all(
+                                        Array.from(currentFiles).map(async (file) => {
+                                            return new Promise((resolve, reject) => {
+                                                const reader = new FileReader();
+                                                reader.onload = () => resolve({
+                                                    name: file.name,
+                                                    contentType: file.type,
+                                                    url: reader.result as string
+                                                });
+                                                reader.onerror = reject;
+                                                reader.readAsDataURL(file);
+                                            });
+                                        })
+                                    );
+                                }
+
+                                handleSubmit(e, {
+                                    experimental_attachments: attachments as any,
+                                });
+                            }}
+                            className="flex gap-2 items-center"
                         >
-                            <Send size={18} />
-                        </button>
-                    </form>
+                            {/* File Upload */}
+                            <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                ref={fileInputRef}
+                                className="hidden"
+                                onChange={(e) => {
+                                    if (e.target.files) setFiles(e.target.files);
+                                }}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                className="p-2 text-gray-400 hover:text-teal-600 transition"
+                                title="Resim Ekle"
+                            >
+                                <Paperclip size={20} />
+                            </button>
+
+                            {/* Voice Input */}
+                            <button
+                                type="button"
+                                onClick={toggleListening}
+                                className={cn(
+                                    "p-2 transition rounded-full",
+                                    isListening ? "bg-red-100 text-red-500 animate-pulse" : "text-gray-400 hover:text-teal-600"
+                                )}
+                                title="Sesli Yaz"
+                            >
+                                <Mic size={20} />
+                            </button>
+
+                            <input
+                                type="text"
+                                inputMode="text"
+                                autoComplete="off"
+                                autoCorrect="off"
+                                spellCheck={false}
+                                value={input ?? ''}
+                                onChange={handleInputChange}
+                                placeholder="Bir soru sorun..."
+                                className="flex-1 bg-gray-100 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            />
+                            <button
+                                type="submit"
+                                disabled={isLoading || (!(input ?? '').trim() && (!files || files.length === 0))}
+                                className="p-2 bg-teal-600 text-white rounded-full hover:bg-teal-700 disabled:opacity-50 transition"
+                            >
+                                <Send size={18} />
+                            </button>
+                        </form>
+                    </div>
                 </div>
             )}
         </>
