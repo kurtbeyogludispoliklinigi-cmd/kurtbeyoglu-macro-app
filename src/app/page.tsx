@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   User, Users, Lock, LogOut, Shield, Plus, Search, Trash2,
-  Save, RefreshCcw, Phone, Activity, Clock, Cloud, WifiOff, Edit, LayoutDashboard, Calendar
+  Save, RefreshCcw, Phone, Activity, Clock, Cloud, WifiOff, Edit, LayoutDashboard, Calendar, Menu, X
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -83,6 +83,9 @@ export default function Home() {
 
   // View Toggle
   const [activeTab, setActiveTab] = useState<'patients' | 'dashboard' | 'appointments'>('patients');
+
+  // Mobile sidebar toggle - default closed on mobile
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
 
   // Forms
   const [newPatient, setNewPatient] = useState({ name: '', phone: '', anamnez: '' });
@@ -307,8 +310,8 @@ export default function Home() {
             <div className="bg-teal-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
               <Cloud size={32} className="text-teal-600" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-800">DentistNote Bulut</h1>
-            <p className="text-gray-500 text-sm">Online Klinik Sistemi (v2.0 AI)</p>
+            <h1 className="text-2xl font-bold text-gray-800">Kurtbeyoğlu Ağız ve Diş Sağlığı Polikliniği</h1>
+            <p className="text-gray-500 text-sm">Modern Diş Kliniği Yönetim Sistemi</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
@@ -354,19 +357,54 @@ export default function Home() {
   return (
     <div className="flex h-screen overflow-hidden text-gray-800 bg-gray-50">
 
+      {/* Mobile Header Bar (only visible on mobile) */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b shadow-sm">
+        <div className={cn("p-4 text-white flex justify-between items-center", currentUser.role === 'admin' ? 'bg-indigo-600' : 'bg-teal-600')}>
+          <button
+            onClick={() => setShowMobileSidebar(!showMobileSidebar)}
+            className="p-2 hover:bg-white/20 rounded-full transition"
+          >
+            {showMobileSidebar ? <X size={20} /> : <Menu size={20} />}
+          </button>
+          <div className="text-center flex-1">
+            <h1 className="font-bold text-sm">Kurtbeyoğlu Diş Kliniği</h1>
+            <p className="text-xs opacity-80">{currentUser.name}</p>
+          </div>
+          <div className="flex gap-1">
+            <ThemeToggle />
+            <button onClick={() => setCurrentUser(null)} className="p-2 hover:bg-white/20 rounded-full transition">
+              <LogOut size={18} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Overlay */}
+      {showMobileSidebar && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/50 z-30 backdrop-blur-sm"
+          onClick={() => setShowMobileSidebar(false)}
+        />
+      )}
+
       {/* SIDEBAR */}
-      <div className="w-full md:w-1/3 lg:w-1/4 bg-white border-r flex flex-col z-10 shadow-lg relative h-full">
+      <div className={cn(
+        "bg-white border-r flex flex-col shadow-lg relative h-full transition-transform duration-300",
+        "md:w-1/3 lg:w-1/4 md:relative md:translate-x-0",
+        "fixed top-0 left-0 bottom-0 w-[85%] max-w-sm z-40",
+        showMobileSidebar ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+      )}>
         {loading && <div className="absolute top-0 left-0 w-full h-1 bg-teal-100"><div className="h-full bg-teal-500 animate-pulse w-1/2"></div></div>}
 
-        {/* Header */}
-        <div className={cn("p-4 text-white flex justify-between items-center shadow-md", currentUser.role === 'admin' ? 'bg-indigo-600' : 'bg-teal-600')}>
+        {/* Header - Desktop only */}
+        <div className={cn("hidden md:flex p-4 text-white justify-between items-center shadow-md", currentUser.role === 'admin' ? 'bg-indigo-600' : 'bg-teal-600')}>
           <div>
             <h1 className="font-bold text-lg flex items-center gap-2">
               {currentUser.role === 'admin' ? <Shield size={18} /> : <Activity size={18} />}
               {currentUser.name}
             </h1>
             <p className="text-xs text-white opacity-80 flex items-center gap-1">
-              <Cloud size={10} /> Online Mod
+              <Cloud size={10} /> Kurtbeyoğlu Diş Kliniği
             </p>
           </div>
           <div className="flex gap-1">
@@ -376,6 +414,22 @@ export default function Home() {
             </button>
             <button onClick={() => setCurrentUser(null)} className="p-2 hover:bg-white/20 rounded-full transition" title="Çıkış Yap">
               <LogOut size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Header Inside Sidebar */}
+        <div className="md:hidden p-4 border-b bg-gray-50">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-bold text-gray-800">{currentUser.name}</h2>
+              <p className="text-xs text-gray-500 flex items-center gap-1">
+                {currentUser.role === 'admin' ? <Shield size={12} /> : <Activity size={12} />}
+                {currentUser.role === 'admin' ? 'Yönetici' : 'Hekim'}
+              </p>
+            </div>
+            <button onClick={fetchData} className="p-2 hover:bg-gray-100 rounded-full transition" title="Yenile">
+              <RefreshCcw size={18} className="text-gray-600" />
             </button>
           </div>
         </div>
@@ -509,32 +563,32 @@ export default function Home() {
       </div>
 
       {/* DETAIL PANEL */}
-      <div className="flex-1 bg-gray-50 flex flex-col h-full overflow-hidden relative">
+      <div className="flex-1 bg-gray-50 flex flex-col h-full overflow-hidden relative pt-16 md:pt-0">
         {activePatient ? (
           <>
             {/* Patient Header */}
-            <div className="bg-white p-6 shadow-sm border-b flex justify-between items-start">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
+            <div className="bg-white p-4 md:p-6 shadow-sm border-b flex flex-col sm:flex-row justify-between items-start gap-4">
+              <div className="flex-1">
+                <h2 className="text-xl md:text-2xl font-bold text-gray-800 flex items-center gap-3">
                   {activePatient.name}
                 </h2>
-                <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-600">
-                  <span className="flex items-center gap-1 bg-gray-100 px-3 py-1 rounded-full">
+                <div className="flex flex-wrap gap-2 md:gap-4 mt-2 text-xs md:text-sm text-gray-600">
+                  <span className="flex items-center gap-1 bg-gray-100 px-2 md:px-3 py-1 rounded-full">
                     <Phone size={14} /> {activePatient.phone}
                   </span>
-                  <span className="flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-100 px-3 py-1 rounded-full">
+                  <span className="flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 md:px-3 py-1 rounded-full">
                     <User size={14} /> Hekim: {activePatient.doctor_name}
                   </span>
                 </div>
                 {activePatient.anamnez && (
-                  <div className="mt-3 p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-100 inline-block">
+                  <div className="mt-3 p-2 md:p-3 bg-red-50 text-red-700 text-xs md:text-sm rounded-lg border border-red-100">
                     <strong>⚠️ Anamnez:</strong> {activePatient.anamnez}
                   </div>
                 )}
               </div>
 
               {(currentUser.role === 'admin' || activePatient.doctor_id === currentUser.id) && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 self-end sm:self-start">
                   <PatientReportButton patient={activePatient} treatments={activePatient.treatments || []} />
                   <button
                     onClick={() => handleDeletePatient(activePatient.id)}
@@ -548,36 +602,38 @@ export default function Home() {
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-6 pb-24">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-24">
 
               {(currentUser.role === 'admin' || activePatient.doctor_id === currentUser.id) && (
-                <div className="bg-white p-5 rounded-xl shadow-sm border mb-6">
-                  <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border mb-6">
+                  <h3 className="text-base md:text-lg font-semibold text-gray-700 mb-4 flex items-center gap-2">
                     <div className="bg-teal-100 p-1.5 rounded text-teal-700"><Plus size={18} /></div>
                     Yeni İşlem Ekle
                   </h3>
-                  <form onSubmit={handleAddTreatment} className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Diş No</label>
-                      <input type="text" placeholder="16" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none" value={newTreatment.toothNo} onChange={e => setNewTreatment({ ...newTreatment, toothNo: e.target.value })} />
+                  <form onSubmit={handleAddTreatment} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Diş No</label>
+                        <input type="text" placeholder="16" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none" value={newTreatment.toothNo} onChange={e => setNewTreatment({ ...newTreatment, toothNo: e.target.value })} />
+                      </div>
+                      <div className="sm:col-span-2 lg:col-span-1">
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Yapılan İşlem</label>
+                        <input type="text" placeholder="Kanal Tedavisi" required className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none" value={newTreatment.procedure} onChange={e => setNewTreatment({ ...newTreatment, procedure: e.target.value })} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Ücret (TL)</label>
+                        <input type="number" placeholder="0.00" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none" value={newTreatment.cost} onChange={e => setNewTreatment({ ...newTreatment, cost: e.target.value })} />
+                      </div>
                     </div>
-                    <div className="md:col-span-4">
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Yapılan İşlem</label>
-                      <input type="text" placeholder="Kanal Tedavisi" required className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none" value={newTreatment.procedure} onChange={e => setNewTreatment({ ...newTreatment, procedure: e.target.value })} />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Ücret (TL)</label>
-                      <input type="number" placeholder="0.00" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none" value={newTreatment.cost} onChange={e => setNewTreatment({ ...newTreatment, cost: e.target.value })} />
-                    </div>
-                    <div className="md:col-span-4">
+                    <div>
                       <label className="block text-xs font-medium text-gray-500 mb-1">Notlar</label>
                       <div className="flex gap-2">
                         <input type="text" placeholder="Detay..." className="flex-1 p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none" value={newTreatment.notes} onChange={e => setNewTreatment({ ...newTreatment, notes: e.target.value })} />
                         <VoiceInput onTranscript={(text) => setNewTreatment({ ...newTreatment, notes: newTreatment.notes + ' ' + text })} />
                       </div>
                     </div>
-                    <div className="md:col-span-12 flex justify-end">
-                      <button type="submit" disabled={loading} className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition shadow-sm font-medium disabled:opacity-50">
+                    <div className="flex justify-end">
+                      <button type="submit" disabled={loading} className="w-full sm:w-auto bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition shadow-sm font-medium disabled:opacity-50">
                         {loading ? '...' : 'Kaydet'}
                       </button>
                     </div>
@@ -640,16 +696,16 @@ export default function Home() {
       {/* MODALS */}
       {showAddPatientModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-5 md:p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-gray-800">Yeni Hasta Kartı</h3>
+              <h3 className="text-lg md:text-xl font-bold text-gray-800">Yeni Hasta Kartı</h3>
               <button onClick={() => setShowAddPatientModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
             </div>
             <form onSubmit={handleAddPatient} className="space-y-4">
-              <input type="text" required placeholder="Ad Soyad" className="w-full p-3 border rounded-lg" value={newPatient.name} onChange={e => setNewPatient({ ...newPatient, name: e.target.value })} />
-              <input type="tel" placeholder="Telefon" className="w-full p-3 border rounded-lg" value={newPatient.phone} onChange={e => setNewPatient({ ...newPatient, phone: e.target.value })} />
-              <textarea placeholder="Anamnez..." className="w-full p-3 border border-red-200 bg-red-50 rounded-lg" rows={3} value={newPatient.anamnez} onChange={e => setNewPatient({ ...newPatient, anamnez: e.target.value })}></textarea>
-              <button type="submit" disabled={loading} className="w-full bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700">{loading ? '...' : 'Kaydet'}</button>
+              <input type="text" required placeholder="Ad Soyad" className="w-full p-3 border rounded-lg text-base" value={newPatient.name} onChange={e => setNewPatient({ ...newPatient, name: e.target.value })} />
+              <input type="tel" placeholder="Telefon" className="w-full p-3 border rounded-lg text-base" value={newPatient.phone} onChange={e => setNewPatient({ ...newPatient, phone: e.target.value })} />
+              <textarea placeholder="Anamnez..." className="w-full p-3 border border-red-200 bg-red-50 rounded-lg text-base" rows={3} value={newPatient.anamnez} onChange={e => setNewPatient({ ...newPatient, anamnez: e.target.value })}></textarea>
+              <button type="submit" disabled={loading} className="w-full bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 text-base">{loading ? '...' : 'Kaydet'}</button>
             </form>
           </div>
         </div>
@@ -657,21 +713,21 @@ export default function Home() {
 
       {showAddUserModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-5 md:p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-indigo-800">Hekim Yönetimi</h3>
+              <h3 className="text-lg md:text-xl font-bold text-indigo-800">Hekim Yönetimi</h3>
               <button onClick={() => { setShowAddUserModal(false); }} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
             </div>
 
             <form onSubmit={handleSaveDoctor} className="space-y-4 bg-gray-50 p-4 rounded-lg mb-6 border">
               <div className="text-sm font-bold text-gray-700 mb-2">{editingDoctorId ? 'Hekimi Düzenle' : 'Yeni Hekim Ekle'}</div>
-              <div className="grid grid-cols-2 gap-4">
-                <input type="text" required placeholder="Dr. Adı Soyadı" className="w-full p-3 border rounded-lg" value={newDoctor.name} onChange={e => setNewDoctor({ ...newDoctor, name: e.target.value })} />
-                <input type="text" required placeholder="PIN" className="w-full p-3 border rounded-lg" value={newDoctor.pin} onChange={e => setNewDoctor({ ...newDoctor, pin: e.target.value })} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <input type="text" required placeholder="Dr. Adı Soyadı" className="w-full p-3 border rounded-lg text-base" value={newDoctor.name} onChange={e => setNewDoctor({ ...newDoctor, name: e.target.value })} />
+                <input type="text" required placeholder="PIN" className="w-full p-3 border rounded-lg text-base" value={newDoctor.pin} onChange={e => setNewDoctor({ ...newDoctor, pin: e.target.value })} />
               </div>
-              <div className="flex gap-2">
-                <button type="submit" disabled={loading} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700 shadow-sm">{loading ? '...' : (editingDoctorId ? 'Güncelle' : 'Ekle')}</button>
-                {editingDoctorId && <button type="button" onClick={() => { setEditingDoctorId(null); setNewDoctor({ name: '', pin: '' }); }} className="px-4 py-2 bg-gray-300 rounded-lg hover:bg-gray-400 font-medium">İptal</button>}
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button type="submit" disabled={loading} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700 shadow-sm text-base">{loading ? '...' : (editingDoctorId ? 'Güncelle' : 'Ekle')}</button>
+                {editingDoctorId && <button type="button" onClick={() => { setEditingDoctorId(null); setNewDoctor({ name: '', pin: '' }); }} className="px-4 py-2 bg-gray-300 rounded-lg hover:bg-gray-400 font-medium text-base">İptal</button>}
               </div>
             </form>
 

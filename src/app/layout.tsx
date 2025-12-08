@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DentistNote Pro",
-  description: "Bulut tabanlı diş kliniği yönetim sistemi",
+  title: "Kurtbeyoğlu Ağız ve Diş Sağlığı Polikliniği",
+  description: "Kurtbeyoğlu Ağız ve Diş Sağlığı Polikliniği - Modern diş kliniği yönetim sistemi",
   manifest: "/manifest.json",
 };
 
