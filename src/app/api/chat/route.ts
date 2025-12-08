@@ -4,21 +4,27 @@ import { streamText, tool } from 'ai';
 import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
 
-// Server-side Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseKey) {
-    console.error('Supabase environment variables are not set');
-}
-
-const supabase = createClient(supabaseUrl || '', supabaseKey || '');
 
 export const maxDuration = 30;
 
 export async function POST(req: Request) {
     try {
         const { messages } = await req.json();
+
+        // Server-side Supabase client
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+        if (!supabaseUrl || !supabaseKey) {
+            console.error('Supabase environment variables are not set');
+            return new Response(
+                JSON.stringify({ error: 'Supabase configuration missing' }),
+                { status: 500, headers: { 'Content-Type': 'application/json' } }
+            );
+        }
+
+        const supabase = createClient(supabaseUrl, supabaseKey);
 
         // Check if API key is available
         if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
