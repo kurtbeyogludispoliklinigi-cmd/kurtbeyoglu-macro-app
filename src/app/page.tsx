@@ -353,6 +353,31 @@ export default function Home() {
     setLoading(false);
   };
 
+  const handleEditPatient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !editingPatient) return;
+
+    setLoading(true);
+    const { error } = await supabase
+      .from('patients')
+      .update({
+        name: editingPatient.name,
+        phone: editingPatient.phone,
+        anamnez: hasPermission.editAnamnez(currentUser.role) ? editingPatient.anamnez : editingPatient.anamnez
+      })
+      .eq('id', editingPatient.id);
+
+    if (error) {
+      toast({ type: 'error', message: error.message });
+    } else {
+      setShowEditPatientModal(false);
+      setEditingPatient(null);
+      toast({ type: 'success', message: 'Hasta bilgileri güncellendi!' });
+      fetchData();
+    }
+    setLoading(false);
+  };
+
   const handleAddTreatment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser || !selectedPatientId) return;
