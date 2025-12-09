@@ -191,7 +191,7 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
 
             {/* Monthly Revenue Chart */}
             <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-slate-700">
-                <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
+                <h3 className="text-base md:text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
                     <TrendingUp size={20} className="text-teal-500" />
                     Aylık Gelir Grafiği
                 </h3>
@@ -205,8 +205,17 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
                                 </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                            <XAxis dataKey="name" stroke="#6b7280" />
-                            <YAxis stroke="#6b7280" />
+                            <XAxis
+                                dataKey="name"
+                                stroke="#9ca3af"
+                                tick={{ fill: '#6b7280' }}
+                                style={{ fontSize: '12px' }}
+                            />
+                            <YAxis
+                                stroke="#9ca3af"
+                                tick={{ fill: '#6b7280' }}
+                                style={{ fontSize: '12px' }}
+                            />
                             <Tooltip
                                 formatter={(value: number) => [`${value.toLocaleString('tr-TR')} ₺`, 'Gelir']}
                                 contentStyle={{
@@ -230,7 +239,7 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Procedure Breakdown */}
                 <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-slate-700">
-                    <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
+                    <h3 className="text-base md:text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
                         <Activity size={20} className="text-purple-500" />
                         En Çok Yapılan İşlemler
                     </h3>
@@ -268,7 +277,7 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
                 {/* Doctor Performance (Admin Only) */}
                 {currentUser.role === 'admin' && (
                     <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-slate-700">
-                        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
+                        <h3 className="text-base md:text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
                             <Users size={20} className="text-indigo-500" />
                             Hekim Performansı
                         </h3>
@@ -277,8 +286,20 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={doctorPerformance} layout="vertical">
                                         <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                                        <XAxis type="number" stroke="#6b7280" />
-                                        <YAxis dataKey="name" type="category" stroke="#6b7280" width={80} />
+                                        <XAxis
+                                            type="number"
+                                            stroke="#9ca3af"
+                                            tick={{ fill: '#6b7280' }}
+                                            style={{ fontSize: '12px' }}
+                                        />
+                                        <YAxis
+                                            dataKey="name"
+                                            type="category"
+                                            stroke="#9ca3af"
+                                            tick={{ fill: '#6b7280' }}
+                                            width={80}
+                                            style={{ fontSize: '12px' }}
+                                        />
                                         <Tooltip
                                             formatter={(value: number, name: string) => [
                                                 name === 'revenue' ? `${value.toLocaleString('tr-TR')} ₺` : value,
@@ -321,7 +342,7 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
 
             {/* Export Section */}
             <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-slate-700">
-                <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
+                <h3 className="text-base md:text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
                     <Download size={20} className="text-gray-500" />
                     Rapor İndir
                 </h3>
@@ -349,8 +370,8 @@ function StatCard({ icon: Icon, label, value, color }: StatCardProps) {
                     <Icon size={20} />
                 </div>
                 <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
-                    <p className="text-xl font-bold text-gray-800 dark:text-gray-100">{value}</p>
+                    <p className="text-xs md:text-sm text-gray-600 dark:text-gray-300 font-medium">{label}</p>
+                    <p className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white mt-2">{value}</p>
                 </div>
             </div>
         </div>

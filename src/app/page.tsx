@@ -647,17 +647,20 @@ export default function Home() {
           >
             <Calendar size={14} /> Randevular
           </button>
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={cn(
-              "flex-1 py-2 px-2 rounded-lg font-medium text-xs flex items-center justify-center gap-1 transition",
-              activeTab === 'dashboard'
-                ? "bg-white dark:bg-slate-800 shadow text-teal-600"
-                : "text-gray-500 hover:bg-white/50"
-            )}
-          >
-            <LayoutDashboard size={14} /> Dashboard
-          </button>
+          {/* Dashboard tab - SADECE ADMIN ve HEKİM için */}
+          {hasPermission.viewDashboard(currentUser.role) && (
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className={cn(
+                "flex-1 py-2 px-2 rounded-lg font-medium text-xs flex items-center justify-center gap-1 transition",
+                activeTab === 'dashboard'
+                  ? "bg-white dark:bg-slate-800 shadow text-teal-600"
+                  : "text-gray-500 hover:bg-white/50"
+              )}
+            >
+              <LayoutDashboard size={14} /> Dashboard
+            </button>
+          )}
         </div>
 
         {/* Search & Add Patient */}
@@ -682,16 +685,9 @@ export default function Home() {
           </div>
         )}
 
-        {/* Patient List or Dashboard or Appointments */}
+        {/* Patient List or Appointments */}
         <div className="flex-1 overflow-y-auto">
-          {activeTab === 'dashboard' ? (
-            <Dashboard
-              patients={patients}
-              treatments={treatments}
-              doctors={users}
-              currentUser={currentUser}
-            />
-          ) : activeTab === 'appointments' ? (
+          {activeTab === 'appointments' ? (
             <AppointmentsTab
               currentUser={currentUser}
               patients={patients}
@@ -744,7 +740,16 @@ export default function Home() {
 
       {/* DETAIL PANEL */}
       <div className="flex-1 bg-gray-50 flex flex-col h-full overflow-hidden relative pt-16 md:pt-0">
-        {activePatient ? (
+        {activeTab === 'dashboard' ? (
+          <div className="h-full overflow-y-auto">
+            <Dashboard
+              patients={patients}
+              treatments={treatments}
+              doctors={users}
+              currentUser={currentUser}
+            />
+          </div>
+        ) : activePatient ? (
           <>
             {/* Patient Header */}
             <div className="bg-white p-4 md:p-6 shadow-sm border-b flex flex-col sm:flex-row justify-between items-start gap-4">
