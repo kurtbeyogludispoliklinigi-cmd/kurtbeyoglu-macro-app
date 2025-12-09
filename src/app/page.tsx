@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   User, Users, Lock, LogOut, Shield, Plus, Search, Trash2,
-  Save, RefreshCcw, Phone, Activity, Clock, Cloud, WifiOff, Edit, LayoutDashboard, Calendar, Menu, X
+  Save, RefreshCcw, Phone, Activity, Clock, Cloud, WifiOff, Edit, LayoutDashboard, Calendar, Menu, X, DollarSign
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -24,10 +24,13 @@ function cn(...inputs: (string | undefined | null | false)[]) {
 }
 
 // --- TYPES ---
+type DoctorRole = 'admin' | 'doctor' | 'banko' | 'asistan';
+type PaymentStatus = 'pending' | 'paid' | 'partial';
+
 interface Doctor {
   id: string;
   name: string;
-  role: string;
+  role: DoctorRole;
   pin: string;
 }
 
@@ -51,10 +54,34 @@ interface Treatment {
   notes: string;
   created_at: string;
   added_by: string;
+  payment_status?: PaymentStatus;
+  payment_amount?: number;
+  payment_note?: string | null;
 }
 
-// --- ICON COMPONENT (Wrapper for compatibility if needed, using lucide direct mostly) ---
-// We will use Lucide icons directly in the code for better tree-shaking and standard usage.
+// --- PERMISSION HELPER ---
+const hasPermission = {
+  viewAllPatients: (role: DoctorRole) =>
+    role === 'admin' || role === 'banko' || role === 'asistan',
+
+  editAnamnez: (role: DoctorRole) =>
+    role === 'admin' || role === 'doctor' || role === 'asistan',
+
+  deletePatient: (role: DoctorRole) =>
+    role === 'admin' || role === 'doctor',
+
+  addTreatment: (role: DoctorRole) =>
+    role === 'admin' || role === 'doctor' || role === 'asistan',
+
+  addPayment: (role: DoctorRole) =>
+    role === 'admin' || role === 'banko',
+
+  viewDashboard: (role: DoctorRole) =>
+    role === 'admin' || role === 'doctor',
+
+  manageUsers: (role: DoctorRole) =>
+    role === 'admin',
+};
 
 export default function Home() {
   const { toast } = useToast();
@@ -80,6 +107,7 @@ export default function Home() {
   // Modals
   const [showAddPatientModal, setShowAddPatientModal] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   // View Toggle
   const [activeTab, setActiveTab] = useState<'patients' | 'dashboard' | 'appointments'>('patients');
@@ -92,8 +120,19 @@ export default function Home() {
   const [showEditPatientModal, setShowEditPatientModal] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [newTreatment, setNewTreatment] = useState({ toothNo: '', procedure: '', cost: '', notes: '' });
-  const [newDoctor, setNewDoctor] = useState({ name: '', pin: '' });
+  const [newDoctor, setNewDoctor] = useState<{ name: string; pin: string; role: DoctorRole }>({ name: '', pin: '', role: 'doctor' });
   const [editingDoctorId, setEditingDoctorId] = useState<string | null>(null);
+
+  // Payment form state
+  const [paymentForm, setPaymentForm] = useState({
+    patient_id: '',
+    payment_amount: 0,
+    payment_status: 'paid' as PaymentStatus,
+    payment_note: ''
+  });
+
+  // Doctor selection for patient creation (BANKO/ASISTAN)
+  const [selectedDoctorForPatient, setSelectedDoctorForPatient] = useState('');
 
   // --- FETCHING ---
   // --- FETCHING ---
@@ -221,26 +260,27 @@ export default function Home() {
     if (editingDoctorId) {
       const { error } = await supabase.from('doctors').update({
         name: newDoctor.name,
-        pin: newDoctor.pin
+        pin: newDoctor.pin,
+        role: newDoctor.role || 'doctor'
       }).eq('id', editingDoctorId);
       if (error) toast({ type: 'error', message: error.message });
       else {
         setEditingDoctorId(null);
-        setNewDoctor({ name: '', pin: '' });
-        toast({ type: 'success', message: 'Hekim güncellendi!' });
+        setNewDoctor({ name: '', pin: '', role: 'doctor' });
+        toast({ type: 'success', message: 'Kullanıcı güncellendi!' });
         const { data } = await supabase.from('doctors').select('*');
         if (data) setUsers(data);
       }
     } else {
       const { error } = await supabase.from('doctors').insert({
         name: newDoctor.name,
-        role: 'doctor',
+        role: newDoctor.role || 'doctor',
         pin: newDoctor.pin
       });
       if (error) toast({ type: 'error', message: error.message });
       else {
-        setNewDoctor({ name: '', pin: '' });
-        toast({ type: 'success', message: 'Yeni hekim eklendi!' });
+        setNewDoctor({ name: '', pin: '', role: 'doctor' });
+        toast({ type: 'success', message: 'Yeni kullanıcı eklendi!' });
         // Refresh doctors list manually since fetchData(currentUser) might not fetch doctors
         const { data } = await supabase.from('doctors').select('*');
         if (data) setUsers(data);
@@ -264,18 +304,34 @@ export default function Home() {
   const handleAddPatient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
+
+    // Hekim ID belirleme
+    let doctorId = currentUser.id;
+    let doctorName = currentUser.name;
+
+    if (currentUser.role === 'banko' || currentUser.role === 'asistan') {
+      if (!selectedDoctorForPatient) {
+        toast({ type: 'error', message: 'Lütfen hekim seçin' });
+        return;
+      }
+      doctorId = selectedDoctorForPatient;
+      const selectedDoc = users.find(u => u.id === selectedDoctorForPatient);
+      doctorName = selectedDoc?.name || '';
+    }
+
     setLoading(true);
     const { data, error } = await supabase.from('patients').insert({
-      doctor_id: currentUser.id,
-      doctor_name: currentUser.name,
+      doctor_id: doctorId,
+      doctor_name: doctorName,
       name: newPatient.name,
       phone: newPatient.phone,
-      anamnez: newPatient.anamnez
+      anamnez: hasPermission.editAnamnez(currentUser.role) ? newPatient.anamnez : ''
     }).select();
 
     if (error) toast({ type: 'error', message: error.message });
     else {
       setNewPatient({ name: '', phone: '', anamnez: '' });
+      setSelectedDoctorForPatient('');
       setShowAddPatientModal(false);
       if (data && data[0]) setSelectedPatientId(data[0].id);
       toast({ type: 'success', message: 'Yeni hasta eklendi!' });
@@ -327,6 +383,38 @@ export default function Home() {
     if (error) toast({ type: 'error', message: error.message });
     else {
       toast({ type: 'success', message: 'İşlem silindi.' });
+      fetchData();
+    }
+    setLoading(false);
+  };
+
+  const handleAddPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !paymentForm.patient_id || paymentForm.payment_amount <= 0) {
+      toast({ type: 'error', message: 'Hasta ve tutar gerekli' });
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase.from('treatments').insert({
+      patient_id: paymentForm.patient_id,
+      tooth_no: '', // Boş = ödeme kaydı
+      procedure: `ÖDEME - ${paymentForm.payment_status === 'paid' ? 'Tam Ödendi' : 'Kısmi Ödeme'}`,
+      cost: paymentForm.payment_amount,
+      notes: paymentForm.payment_note || '',
+      added_by: currentUser.name,
+      payment_status: 'paid',
+      payment_amount: paymentForm.payment_amount,
+      payment_note: paymentForm.payment_note
+    });
+
+    if (error) {
+      toast({ type: 'error', message: error.message });
+    } else {
+      toast({ type: 'success', message: 'Ödeme kaydedildi!' });
+      setShowPaymentModal(false);
+      setPaymentForm({ patient_id: '', payment_amount: 0, payment_status: 'paid', payment_note: '' });
+      await supabase.from('patients').update({ updated_at: new Date().toISOString() }).eq('id', paymentForm.patient_id);
       fetchData();
     }
     setLoading(false);
@@ -407,7 +495,12 @@ export default function Home() {
 
       {/* Mobile Header Bar (only visible on mobile) */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b shadow-sm">
-        <div className={cn("p-4 text-white flex justify-between items-center", currentUser.role === 'admin' ? 'bg-indigo-600' : 'bg-teal-600')}>
+        <div className={cn("p-4 text-white flex justify-between items-center",
+          currentUser.role === 'admin' ? 'bg-indigo-600' :
+          currentUser.role === 'doctor' ? 'bg-teal-600' :
+          currentUser.role === 'banko' ? 'bg-amber-600' :
+          'bg-purple-600'
+        )}>
           <button
             onClick={() => setShowMobileSidebar(!showMobileSidebar)}
             className="p-2 hover:bg-white/20 rounded-full transition"
@@ -445,10 +538,18 @@ export default function Home() {
         {loading && <div className="absolute top-0 left-0 w-full h-1 bg-teal-100"><div className="h-full bg-teal-500 animate-pulse w-1/2"></div></div>}
 
         {/* Header - Desktop only */}
-        <div className={cn("hidden md:flex p-4 text-white justify-between items-center shadow-md", currentUser.role === 'admin' ? 'bg-indigo-600' : 'bg-teal-600')}>
+        <div className={cn("hidden md:flex p-4 text-white justify-between items-center shadow-md",
+          currentUser.role === 'admin' ? 'bg-indigo-600' :
+          currentUser.role === 'doctor' ? 'bg-teal-600' :
+          currentUser.role === 'banko' ? 'bg-amber-600' :
+          'bg-purple-600'
+        )}>
           <div>
             <h1 className="font-bold text-lg flex items-center gap-2">
-              {currentUser.role === 'admin' ? <Shield size={18} /> : <Activity size={18} />}
+              {currentUser.role === 'admin' ? <Shield size={18} /> :
+               currentUser.role === 'doctor' ? <Activity size={18} /> :
+               currentUser.role === 'banko' ? <User size={18} /> :
+               <Users size={18} />}
               {currentUser.name}
             </h1>
             <p className="text-xs text-white opacity-80 flex items-center gap-1">
@@ -472,8 +573,14 @@ export default function Home() {
             <div>
               <h2 className="font-bold text-gray-800">{currentUser.name}</h2>
               <p className="text-xs text-gray-500 flex items-center gap-1">
-                {currentUser.role === 'admin' ? <Shield size={12} /> : <Activity size={12} />}
-                {currentUser.role === 'admin' ? 'Yönetici' : 'Hekim'}
+                {currentUser.role === 'admin' ? <Shield size={12} /> :
+                 currentUser.role === 'doctor' ? <Activity size={12} /> :
+                 currentUser.role === 'banko' ? <User size={12} /> :
+                 <Users size={12} />}
+                {currentUser.role === 'admin' ? 'ADMIN' :
+                 currentUser.role === 'doctor' ? 'HEKİM' :
+                 currentUser.role === 'banko' ? 'BANKO' :
+                 'ASİSTAN'}
               </p>
             </div>
             <button onClick={() => fetchData()} className="p-2 hover:bg-gray-100 rounded-full transition" title="Yenile">
@@ -483,7 +590,7 @@ export default function Home() {
         </div>
 
         {/* Admin Button */}
-        {currentUser.role === 'admin' && (
+        {hasPermission.manageUsers(currentUser.role) && (
           <div className="p-2 bg-indigo-50 border-b">
             <button onClick={() => setShowAddUserModal(true)} className="flex items-center justify-center gap-2 w-full p-2 bg-white border border-indigo-200 rounded hover:bg-indigo-100 text-indigo-700 font-medium text-sm transition">
               <Users size={16} /> Hekim Yönetimi
@@ -535,7 +642,7 @@ export default function Home() {
               <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
               <input
                 type="text"
-                placeholder={currentUser.role === 'admin' ? "Tüm hastalarda ara..." : "Kendi hastalarında ara..."}
+                placeholder={hasPermission.viewAllPatients(currentUser.role) ? "Tüm hastalarda ara..." : "Kendi hastalarında ara..."}
                 className="w-full pl-10 pr-4 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:ring-teal-500 transition bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -587,7 +694,7 @@ export default function Home() {
                           <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-1">
                             <Phone size={12} /> {p.phone || 'Tel yok'}
                           </p>
-                          {currentUser.role === 'admin' && (
+                          {hasPermission.viewAllPatients(currentUser.role) && (
                             <span className="text-[10px] bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded mt-1 inline-block">
                               Hekim: {p.doctor_name || 'Bilinmiyor'}
                             </span>
@@ -635,9 +742,10 @@ export default function Home() {
                 )}
               </div>
 
-              {(currentUser.role === 'admin' || activePatient.doctor_id === currentUser.id) && (
-                <div className="flex items-center gap-2 self-end sm:self-start">
-                  <PatientReportButton patient={activePatient} treatments={activePatient.treatments || []} />
+              <div className="flex items-center gap-2 self-end sm:self-start">
+                <PatientReportButton patient={activePatient} treatments={activePatient.treatments || []} />
+                {((currentUser.role === 'admin' || currentUser.role === 'banko' || currentUser.role === 'asistan') ||
+                  (currentUser.role === 'doctor' && activePatient.doctor_id === currentUser.id)) && (
                   <button
                     onClick={() => {
                       setEditingPatient(activePatient);
@@ -648,20 +756,26 @@ export default function Home() {
                   >
                     <Edit size={20} />
                   </button>
+                )}
+                {hasPermission.deletePatient(currentUser.role) &&
+                  (currentUser.role === 'admin' || activePatient.doctor_id === currentUser.id) && (
                   <button
                     onClick={() => handleDeletePatient(activePatient.id)}
                     className="text-gray-400 hover:text-red-500 transition p-2"
                     title="Hastayı Sil"
                   >
                     <Trash2 size={20} />
-                </div>
-              )}
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-24">
 
-              {(currentUser.role === 'admin' || activePatient.doctor_id === currentUser.id) && (
+              {(hasPermission.addTreatment(currentUser.role) &&
+                ((currentUser.role === 'admin' || currentUser.role === 'asistan') ||
+                 (currentUser.role === 'doctor' && activePatient.doctor_id === currentUser.id))) && (
                 <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border mb-6">
                   <h3 className="text-base md:text-lg font-semibold text-gray-700 mb-4 flex items-center gap-2">
                     <div className="bg-teal-100 p-1.5 rounded text-teal-700"><Plus size={18} /></div>
@@ -698,6 +812,21 @@ export default function Home() {
                 </div>
               )}
 
+              {hasPermission.addPayment(currentUser.role) && (
+                <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border mb-6">
+                  <button
+                    onClick={() => {
+                      setPaymentForm({...paymentForm, patient_id: activePatient.id});
+                      setShowPaymentModal(true);
+                    }}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition shadow-sm font-medium"
+                  >
+                    <DollarSign size={20} />
+                    Ödeme Ekle
+                  </button>
+                </div>
+              )}
+
               <h3 className="text-lg font-semibold text-gray-700 mb-4 px-1">Tedavi Geçmişi</h3>
               {!activePatient.treatments || activePatient.treatments.length === 0 ? (
                 <div className="text-center py-10 bg-white rounded-xl border border-dashed">
@@ -725,7 +854,9 @@ export default function Home() {
                       </div>
                       {t.notes && <p className="text-gray-600 text-sm mt-2 bg-gray-50 p-2 rounded block">{t.notes}</p>}
 
-                      {(currentUser.role === 'admin' || activePatient.doctor_id === currentUser.id) && (
+                      {(hasPermission.addTreatment(currentUser.role) &&
+                        ((currentUser.role === 'admin' || currentUser.role === 'asistan') ||
+                         (currentUser.role === 'doctor' && activePatient.doctor_id === currentUser.id))) && (
                         <button
                           onClick={() => handleDeleteTreatment(t.id)}
                           className="absolute bottom-4 right-4 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"
@@ -759,10 +890,37 @@ export default function Home() {
               <button onClick={() => setShowAddPatientModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
             </div>
             <form onSubmit={handleAddPatient} className="space-y-4">
-              <input type="text" required placeholder="Ad Soyad" className="w-full p-3 border rounded-lg text-base" value={newPatient.name} onChange={e => setNewPatient({ ...newPatient, name: e.target.value })} />
-              <input type="tel" placeholder="Telefon" className="w-full p-3 border rounded-lg text-base" value={newPatient.phone} onChange={e => setNewPatient({ ...newPatient, phone: e.target.value })} />
-              <textarea placeholder="Anamnez..." className="w-full p-3 border border-red-200 bg-red-50 rounded-lg text-base" rows={3} value={newPatient.anamnez} onChange={e => setNewPatient({ ...newPatient, anamnez: e.target.value })}></textarea>
-              <button type="submit" disabled={loading} className="w-full bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 text-base">{loading ? '...' : 'Kaydet'}</button>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ad Soyad *</label>
+                <input type="text" required placeholder="Ad Soyad" className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none" value={newPatient.name} onChange={e => setNewPatient({ ...newPatient, name: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Telefon</label>
+                <input type="tel" placeholder="Telefon" className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none" value={newPatient.phone} onChange={e => setNewPatient({ ...newPatient, phone: e.target.value })} />
+              </div>
+              {(currentUser.role === 'banko' || currentUser.role === 'asistan') && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Hekim Seç *</label>
+                  <select
+                    value={selectedDoctorForPatient}
+                    onChange={(e) => setSelectedDoctorForPatient(e.target.value)}
+                    className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none"
+                    required
+                  >
+                    <option value="">Hekim Seçiniz...</option>
+                    {users.filter(u => u.role === 'doctor').map(doc => (
+                      <option key={doc.id} value={doc.id}>{doc.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {hasPermission.editAnamnez(currentUser.role) && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Anamnez</label>
+                  <textarea placeholder="Anamnez..." className="w-full p-3 border border-red-200 bg-red-50 rounded-lg text-base focus:ring-2 focus:ring-red-300 outline-none" rows={3} value={newPatient.anamnez} onChange={e => setNewPatient({ ...newPatient, anamnez: e.target.value })}></textarea>
+                </div>
+              )}
+              <button type="submit" disabled={loading} className="w-full bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 text-base disabled:opacity-50">{loading ? 'Kaydediyor...' : 'Kaydet'}</button>
             </form>
           </div>
         </div>
@@ -797,6 +955,87 @@ export default function Home() {
         </div>
       )}
 
+      {showPaymentModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-5 md:p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg md:text-xl font-bold text-amber-800">Ödeme Ekle</h3>
+              <button onClick={() => setShowPaymentModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+
+            <form onSubmit={handleAddPayment} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Hasta *</label>
+                <select
+                  value={paymentForm.patient_id}
+                  onChange={(e) => setPaymentForm({...paymentForm, patient_id: e.target.value})}
+                  className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-amber-500 outline-none"
+                  required
+                >
+                  <option value="">Hasta Seçin</option>
+                  {patients.map(p => (
+                    <option key={p.id} value={p.id}>{p.name} - {p.phone}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tutar (₺) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={paymentForm.payment_amount}
+                  onChange={(e) => setPaymentForm({...paymentForm, payment_amount: Number(e.target.value)})}
+                  className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-amber-500 outline-none"
+                  placeholder="0.00"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Durum *</label>
+                <select
+                  value={paymentForm.payment_status}
+                  onChange={(e) => setPaymentForm({...paymentForm, payment_status: e.target.value as PaymentStatus})}
+                  className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-amber-500 outline-none"
+                >
+                  <option value="paid">Tam Ödendi</option>
+                  <option value="partial">Kısmi Ödeme</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Not</label>
+                <textarea
+                  value={paymentForm.payment_note}
+                  onChange={(e) => setPaymentForm({...paymentForm, payment_note: e.target.value})}
+                  className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-amber-500 outline-none"
+                  rows={3}
+                  placeholder="Ödeme notu (isteğe bağlı)"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPaymentModal(false)}
+                  className="flex-1 py-3 border rounded-lg font-medium hover:bg-gray-50 text-base"
+                >
+                  İptal
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-amber-600 text-white py-3 rounded-lg font-bold hover:bg-amber-700 text-base disabled:opacity-50"
+                >
+                  {loading ? 'Kaydediliyor...' : 'Kaydet'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showAddUserModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-5 md:p-6 max-h-[90vh] overflow-y-auto">
@@ -806,14 +1045,33 @@ export default function Home() {
             </div>
 
             <form onSubmit={handleSaveDoctor} className="space-y-4 bg-gray-50 p-4 rounded-lg mb-6 border">
-              <div className="text-sm font-bold text-gray-700 mb-2">{editingDoctorId ? 'Hekimi Düzenle' : 'Yeni Hekim Ekle'}</div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <input type="text" required placeholder="Dr. Adı Soyadı" className="w-full p-3 border rounded-lg text-base" value={newDoctor.name} onChange={e => setNewDoctor({ ...newDoctor, name: e.target.value })} />
-                <input type="text" required placeholder="PIN" className="w-full p-3 border rounded-lg text-base" value={newDoctor.pin} onChange={e => setNewDoctor({ ...newDoctor, pin: e.target.value })} />
+              <div className="text-sm font-bold text-gray-700 mb-2">{editingDoctorId ? 'Kullanıcıyı Düzenle' : 'Yeni Kullanıcı Ekle'}</div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Ad Soyad</label>
+                  <input type="text" required placeholder="Ad Soyad" className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-indigo-500 outline-none" value={newDoctor.name} onChange={e => setNewDoctor({ ...newDoctor, name: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">PIN</label>
+                  <input type="text" required placeholder="PIN" className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-indigo-500 outline-none" value={newDoctor.pin} onChange={e => setNewDoctor({ ...newDoctor, pin: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Rol</label>
+                  <select
+                    value={newDoctor.role || 'doctor'}
+                    onChange={(e) => setNewDoctor({ ...newDoctor, role: e.target.value as DoctorRole })}
+                    className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-indigo-500 outline-none"
+                    required
+                  >
+                    <option value="doctor">HEKİM</option>
+                    <option value="banko">BANKO</option>
+                    <option value="asistan">ASİSTAN</option>
+                  </select>
+                </div>
               </div>
               <div className="flex flex-col sm:flex-row gap-2">
-                <button type="submit" disabled={loading} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700 shadow-sm text-base">{loading ? '...' : (editingDoctorId ? 'Güncelle' : 'Ekle')}</button>
-                {editingDoctorId && <button type="button" onClick={() => { setEditingDoctorId(null); setNewDoctor({ name: '', pin: '' }); }} className="px-4 py-2 bg-gray-300 rounded-lg hover:bg-gray-400 font-medium text-base">İptal</button>}
+                <button type="submit" disabled={loading} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700 shadow-sm text-base disabled:opacity-50">{loading ? '...' : (editingDoctorId ? 'Güncelle' : 'Ekle')}</button>
+                {editingDoctorId && <button type="button" onClick={() => { setEditingDoctorId(null); setNewDoctor({ name: '', pin: '', role: 'doctor' }); }} className="px-4 py-2 bg-gray-300 rounded-lg hover:bg-gray-400 font-medium text-base">İptal</button>}
               </div>
             </form>
 
@@ -826,11 +1084,22 @@ export default function Home() {
                 {users.filter(u => u.role !== 'admin').map(doctor => (
                   <div key={doctor.id} className="flex justify-between items-center p-3 bg-white border rounded-lg hover:shadow-sm transition group">
                     <div>
-                      <span className="font-medium text-gray-800 block">{doctor.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-800">{doctor.name}</span>
+                        <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-semibold",
+                          doctor.role === 'doctor' ? 'bg-teal-100 text-teal-700' :
+                          doctor.role === 'banko' ? 'bg-amber-100 text-amber-700' :
+                          'bg-purple-100 text-purple-700'
+                        )}>
+                          {doctor.role === 'doctor' ? 'HEKİM' :
+                           doctor.role === 'banko' ? 'BANKO' :
+                           'ASİSTAN'}
+                        </span>
+                      </div>
                       <span className="text-xs text-gray-400 font-mono tracking-wider">PIN: {doctor.pin}</span>
                     </div>
                     <div className="flex gap-2 opacity-80 group-hover:opacity-100 transition">
-                      <button onClick={() => { setEditingDoctorId(doctor.id); setNewDoctor({ name: doctor.name, pin: doctor.pin }); }} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-full transition" title="Düzenle">
+                      <button onClick={() => { setEditingDoctorId(doctor.id); setNewDoctor({ name: doctor.name, pin: doctor.pin, role: doctor.role }); }} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-full transition" title="Düzenle">
                         <Edit size={16} />
                       </button>
                       <button onClick={() => handleDeleteDoctor(doctor.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-full transition" title="Sil">
@@ -870,7 +1139,7 @@ function AppointmentsTab({ currentUser, patients, selectedDate, onDateChange, to
     updateAppointment,
     deleteAppointment
   } = useAppointments({
-    doctorId: currentUser.role === 'admin' ? undefined : currentUser.id,
+    doctorId: hasPermission.viewAllPatients(currentUser.role) ? undefined : currentUser.id,
     date: selectedDate
   });
 

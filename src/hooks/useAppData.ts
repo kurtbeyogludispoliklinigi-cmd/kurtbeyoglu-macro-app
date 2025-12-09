@@ -4,10 +4,13 @@ import { supabase } from '@/lib/supabase';
 
 // Define simplified interfaces to avoid circular dependency issues if types are not shared
 // Ideally these should be in a types.ts file, but keeping it simple for this extraction
+export type DoctorRole = 'admin' | 'doctor' | 'banko' | 'asistan';
+export type PaymentStatus = 'pending' | 'paid' | 'partial';
+
 export interface Doctor {
     id: string;
     name: string;
-    role: string;
+    role: DoctorRole;
     pin: string;
 }
 
@@ -31,6 +34,9 @@ export interface Treatment {
     notes: string;
     created_at: string;
     added_by: string;
+    payment_status?: PaymentStatus;
+    payment_amount?: number;
+    payment_note?: string | null;
 }
 
 export function useAppData() {
@@ -65,7 +71,9 @@ export function useAppData() {
                 .select('*')
                 .order('updated_at', { ascending: false });
 
-            if (activeUser.role !== 'admin') {
+            // Only HEKİM (doctor) role sees filtered patients
+            // ADMIN, BANKO, ASISTAN see all patients
+            if (activeUser.role === 'doctor') {
                 patientQuery = patientQuery.eq('doctor_id', activeUser.id);
             }
 

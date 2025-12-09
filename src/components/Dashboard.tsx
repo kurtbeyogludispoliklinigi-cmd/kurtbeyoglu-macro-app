@@ -11,6 +11,9 @@ import {
 } from 'lucide-react';
 import { ExportButtons } from './ReportExport';
 
+type DoctorRole = 'admin' | 'doctor' | 'banko' | 'asistan';
+type PaymentStatus = 'pending' | 'paid' | 'partial';
+
 interface Treatment {
     id: string;
     patient_id: string;
@@ -20,6 +23,9 @@ interface Treatment {
     notes: string;
     created_at: string;
     added_by: string;
+    payment_status?: PaymentStatus;
+    payment_amount?: number;
+    payment_note?: string | null;
 }
 
 interface Patient {
@@ -35,7 +41,7 @@ interface Patient {
 interface Doctor {
     id: string;
     name: string;
-    role: string;
+    role: DoctorRole;
     pin: string;
 }
 
@@ -49,9 +55,13 @@ interface DashboardProps {
 const COLORS = ['#0d9488', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
 export default function Dashboard({ patients, treatments, doctors, currentUser }: DashboardProps) {
-    // Filter data for non-admin users
+    // Filter data based on role
+    // ADMIN, BANKO, ASISTAN see all patients
+    // HEKİM (doctor) sees only own patients
     const filteredPatients = useMemo(() => {
-        if (currentUser.role === 'admin') return patients;
+        if (currentUser.role === 'admin' || currentUser.role === 'banko' || currentUser.role === 'asistan') {
+            return patients;
+        }
         return patients.filter(p => p.doctor_id === currentUser.id);
     }, [patients, currentUser]);
 
