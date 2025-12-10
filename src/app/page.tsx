@@ -17,6 +17,8 @@ import { PatientReportButton } from '@/components/ReportExport';
 import { useAppointments, Appointment } from '@/hooks/useAppointments';
 import { AppointmentModal } from '@/components/AppointmentModal';
 import { AppointmentList } from '@/components/AppointmentList';
+import { TreatmentForm } from '@/components/TreatmentForm';
+import { HelpButton } from '@/components/HelpModal';
 
 // Helper for classes
 function cn(...inputs: (string | undefined | null | false)[]) {
@@ -42,6 +44,9 @@ interface Patient {
   phone: string;
   anamnez: string;
   updated_at: string;
+  created_at?: string;
+  assignment_type?: 'queue' | 'preference';
+  assignment_date?: string;
   treatments?: Treatment[];
 }
 
@@ -108,6 +113,14 @@ export default function Home() {
   const [showAddPatientModal, setShowAddPatientModal] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showDoctorSelectionModal, setShowDoctorSelectionModal] = useState(false);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+
+  // Password change form state
+  const [currentPin, setCurrentPin] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [passwordChanges, setPasswordChanges] = useState<Record<string, string>>({});
 
   // View Toggle
   const [activeTab, setActiveTab] = useState<'patients' | 'dashboard' | 'appointments'>('patients');
@@ -119,7 +132,6 @@ export default function Home() {
   const [newPatient, setNewPatient] = useState({ name: '', phone: '', anamnez: '' });
   const [showEditPatientModal, setShowEditPatientModal] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
-  const [newTreatment, setNewTreatment] = useState({ toothNo: '', procedure: '', cost: '', notes: '' });
   const [newDoctor, setNewDoctor] = useState<{ name: string; pin: string; role: DoctorRole }>({ name: '', pin: '', role: 'doctor' });
   const [editingDoctorId, setEditingDoctorId] = useState<string | null>(null);
 
@@ -133,6 +145,16 @@ export default function Home() {
 
   // Doctor selection for patient creation (BANKO/ASISTAN)
   const [selectedDoctorForPatient, setSelectedDoctorForPatient] = useState('');
+
+  // Queue management for automatic doctor assignment
+  interface QueueData {
+    id: string;
+    date: string;
+    queue_order: string[];
+    current_index: number;
+  }
+  const [queueData, setQueueData] = useState<QueueData | null>(null);
+  const [doctorSelectionMethod, setDoctorSelectionMethod] = useState<'manual' | 'queue' | null>(null);
 
   // --- FETCHING ---
   // --- FETCHING ---
@@ -238,6 +260,107 @@ export default function Home() {
 
   const activePatient = patientsWithTreatments.find((p: Patient) => p.id === selectedPatientId);
 
+  // --- QUEUE MANAGEMENT ---
+  const initializeQueue = async (): Promise<QueueData | null> => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      // Check if today's queue already exists
+      const { data: existingQueue, error: fetchError } = await supabase
+        .from('doctor_queue')
+        .select('*')
+        .eq('date', today)
+        .single();
+
+      if (existingQueue) {
+        setQueueData(existingQueue);
+        return existingQueue;
+      }
+
+      // Create new queue for today with randomized doctor order
+      const doctors = users.filter(u => u.role === 'doctor');
+      if (doctors.length === 0) {
+        toast({ type: 'error', message: 'Hekim bulunamadı!' });
+        return null;
+      }
+
+      // Randomize doctor order
+      const shuffled = [...doctors].sort(() => Math.random() - 0.5);
+      const queueOrder = shuffled.map(d => d.id);
+
+      const { data: newQueue, error: createError } = await supabase
+        .from('doctor_queue')
+        .insert({
+          date: today,
+          queue_order: queueOrder,
+          current_index: 0
+        })
+        .select()
+        .single();
+
+      if (createError) throw createError;
+
+      setQueueData(newQueue);
+      return newQueue;
+    } catch (error) {
+      console.error('Queue initialization error:', error);
+      toast({ type: 'error', message: 'Sıra sistemi başlatılamadı.' });
+      return null;
+    }
+  };
+
+  const getNextDoctor = async (): Promise<string | null> => {
+    let queue = queueData;
+
+    if (!queue) {
+      queue = await initializeQueue();
+      if (!queue) return null;
+    }
+
+    // Get the doctor at current index
+    const doctorId = queue.queue_order[queue.current_index];
+
+    // Calculate next index (wrap around)
+    const nextIndex = (queue.current_index + 1) % queue.queue_order.length;
+
+    // Update the queue index in the database
+    const { error } = await supabase
+      .from('doctor_queue')
+      .update({ current_index: nextIndex })
+      .eq('id', queue.id);
+
+    if (error) {
+      console.error('Queue update error:', error);
+      toast({ type: 'error', message: 'Sıra güncellenemedi.' });
+      return doctorId; // Return the doctor anyway
+    }
+
+    // Update local state
+    setQueueData({ ...queue, current_index: nextIndex });
+
+    return doctorId;
+  };
+
+  const getNextDoctorInQueue = (): Doctor | null => {
+    if (!queueData || queueData.queue_order.length === 0) return null;
+    const doctorId = queueData.queue_order[queueData.current_index];
+    return users.find(u => u.id === doctorId) || null;
+  };
+
+  // Initialize queue when component mounts or when users change
+  useEffect(() => {
+    if (currentUser && (currentUser.role === 'banko' || currentUser.role === 'asistan')) {
+      initializeQueue();
+    }
+  }, [currentUser, users]);
+
+  // Fetch password change history when admin modal opens
+  useEffect(() => {
+    if (showAddUserModal && currentUser?.role === 'admin') {
+      fetchPasswordChangeHistory();
+    }
+  }, [showAddUserModal]);
+
   // --- HANDLERS ---
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -252,6 +375,98 @@ export default function Home() {
     }
   };
 
+  const fetchPasswordChangeHistory = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('password_change_log')
+        .select('doctor_id, changed_at')
+        .order('changed_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Create a map of doctor_id to most recent change date
+      const changeMap: Record<string, string> = {};
+      data?.forEach(log => {
+        if (!changeMap[log.doctor_id]) {
+          changeMap[log.doctor_id] = log.changed_at;
+        }
+      });
+
+      setPasswordChanges(changeMap);
+    } catch (error) {
+      console.error('Failed to fetch password change history:', error);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) return;
+
+    // Validation
+    if (currentUser.pin !== currentPin) {
+      toast({ type: 'error', message: 'Mevcut PIN hatalı!' });
+      return;
+    }
+
+    if (newPin.length < 4) {
+      toast({ type: 'error', message: 'Yeni PIN en az 4 haneli olmalıdır!' });
+      return;
+    }
+
+    if (newPin !== confirmPin) {
+      toast({ type: 'error', message: 'Yeni PIN eşleşmiyor!' });
+      return;
+    }
+
+    if (newPin === currentPin) {
+      toast({ type: 'error', message: 'Yeni PIN eskisiyle aynı olamaz!' });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Update password in doctors table
+      const { error: updateError } = await supabase
+        .from('doctors')
+        .update({ pin: newPin })
+        .eq('id', currentUser.id);
+
+      if (updateError) throw updateError;
+
+      // Log the password change
+      const { error: logError } = await supabase
+        .from('password_change_log')
+        .insert({
+          doctor_id: currentUser.id,
+          changed_by: currentUser.name,
+          ip_address: null, // Can be added with IP detection library if needed
+          user_agent: navigator.userAgent
+        });
+
+      if (logError) console.warn('Password change log failed:', logError);
+
+      // Update local state
+      setCurrentUser({ ...currentUser, pin: newPin });
+
+      // Reset form
+      setCurrentPin('');
+      setNewPin('');
+      setConfirmPin('');
+      setShowChangePasswordModal(false);
+
+      toast({ type: 'success', message: 'Şifreniz başarıyla değiştirildi!' });
+
+      // Refresh users list
+      fetchData();
+    } catch (error) {
+      console.error('Password change error:', error);
+      toast({ type: 'error', message: 'Şifre değiştirme hatası!' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSaveDoctor = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDoctor.name || !newDoctor.pin) return;
@@ -263,7 +478,7 @@ export default function Home() {
         pin: newDoctor.pin,
         role: newDoctor.role || 'doctor'
       }).eq('id', editingDoctorId);
-      if (error) toast({ type: 'error', message: error.message });
+      if (error) toast({ type: 'error', message: 'Kullanıcı güncellenemedi. Lütfen tekrar deneyin.' });
       else {
         setEditingDoctorId(null);
         setNewDoctor({ name: '', pin: '', role: 'doctor' });
@@ -277,7 +492,7 @@ export default function Home() {
         role: newDoctor.role || 'doctor',
         pin: newDoctor.pin
       });
-      if (error) toast({ type: 'error', message: error.message });
+      if (error) toast({ type: 'error', message: 'Yeni kullanıcı eklenemedi. PIN zaten kullanımda olabilir.' });
       else {
         setNewDoctor({ name: '', pin: '', role: 'doctor' });
         toast({ type: 'success', message: 'Yeni kullanıcı eklendi!' });
@@ -293,7 +508,7 @@ export default function Home() {
     if (!confirm('Hekimi sil?')) return;
     setLoading(true);
     const { error } = await supabase.from('doctors').delete().eq('id', id);
-    if (error) toast({ type: 'error', message: error.message });
+    if (error) toast({ type: 'error', message: 'Hekim silinemedi. Önce ilişkili kayıtları silin.' });
     else {
       toast({ type: 'success', message: 'Hekim silindi.' });
       fetchData();
@@ -308,8 +523,10 @@ export default function Home() {
     // Hekim ID belirleme
     let doctorId = currentUser.id;
     let doctorName = currentUser.name;
+    let assignmentType: 'queue' | 'preference' = 'preference'; // Default to preference
 
     if (currentUser.role === 'banko' || currentUser.role === 'asistan') {
+      // Check if doctor was selected via the selection modal
       if (!selectedDoctorForPatient) {
         toast({ type: 'error', message: 'Lütfen hekim seçin' });
         return;
@@ -317,6 +534,13 @@ export default function Home() {
       doctorId = selectedDoctorForPatient;
       const selectedDoc = users.find(u => u.id === selectedDoctorForPatient);
       doctorName = selectedDoc?.name || '';
+
+      // Determine assignment type based on selection method
+      if (doctorSelectionMethod === 'queue') {
+        assignmentType = 'queue';
+      } else {
+        assignmentType = 'preference';
+      }
     }
 
     setLoading(true);
@@ -325,19 +549,51 @@ export default function Home() {
       doctor_name: doctorName,
       name: newPatient.name,
       phone: newPatient.phone,
-      anamnez: hasPermission.editAnamnez(currentUser.role) ? newPatient.anamnez : ''
+      anamnez: hasPermission.editAnamnez(currentUser.role) ? newPatient.anamnez : '',
+      assignment_type: assignmentType,
+      assignment_date: new Date().toISOString().split('T')[0]
     }).select();
 
-    if (error) toast({ type: 'error', message: error.message });
+    if (error) toast({ type: 'error', message: 'Hasta eklenemedi. Lütfen tüm bilgileri kontrol edin.' });
     else {
       setNewPatient({ name: '', phone: '', anamnez: '' });
       setSelectedDoctorForPatient('');
+      setDoctorSelectionMethod(null);
       setShowAddPatientModal(false);
       if (data && data[0]) setSelectedPatientId(data[0].id);
       toast({ type: 'success', message: 'Yeni hasta eklendi!' });
       fetchData();
     }
     setLoading(false);
+  };
+
+  const handleDoctorSelectionConfirm = async () => {
+    if (doctorSelectionMethod === 'queue') {
+      // Get next doctor from queue
+      const nextDoctorId = await getNextDoctor();
+      if (nextDoctorId) {
+        setSelectedDoctorForPatient(nextDoctorId);
+        setShowDoctorSelectionModal(false);
+        setShowAddPatientModal(true);
+      }
+    } else if (doctorSelectionMethod === 'manual') {
+      // User will select from dropdown in the patient modal
+      if (!selectedDoctorForPatient) {
+        toast({ type: 'error', message: 'Lütfen bir hekim seçin' });
+        return;
+      }
+      setShowDoctorSelectionModal(false);
+      setShowAddPatientModal(true);
+    }
+  };
+
+  const handleNewPatientClick = () => {
+    // For banko/asistan, show doctor selection modal first
+    if (currentUser && (currentUser.role === 'banko' || currentUser.role === 'asistan')) {
+      setShowDoctorSelectionModal(true);
+    } else {
+      setShowAddPatientModal(true);
+    }
   };
 
   const handleDeletePatient = async (id: string) => {
@@ -378,28 +634,7 @@ export default function Home() {
     setLoading(false);
   };
 
-  const handleAddTreatment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentUser || !selectedPatientId) return;
-    setLoading(true);
-    const { error } = await supabase.from('treatments').insert({
-      patient_id: selectedPatientId,
-      tooth_no: newTreatment.toothNo,
-      procedure: newTreatment.procedure,
-      cost: Number(newTreatment.cost) || 0,
-      notes: newTreatment.notes,
-      added_by: currentUser.name
-    });
-
-    if (error) toast({ type: 'error', message: error.message });
-    else {
-      setNewTreatment({ toothNo: '', procedure: '', cost: '', notes: '' });
-      await supabase.from('patients').update({ updated_at: new Date().toISOString() }).eq('id', selectedPatientId);
-      toast({ type: 'success', message: 'İşlem kaydedildi!' });
-      fetchData();
-    }
-    setLoading(false);
-  };
+  // Treatment form now handled by TreatmentForm component
 
   const handleDeleteTreatment = async (id: string) => {
     if (!confirm('Sil?')) return;
@@ -479,15 +714,21 @@ export default function Home() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Kullanıcı Seçin</label>
               <select
-                className="w-full p-3 border rounded-lg bg-gray-50 focus:ring-2 focus:ring-teal-500 outline-none"
+                className="w-full p-3 border rounded-lg bg-white focus:ring-2 focus:ring-teal-500 outline-none text-gray-900 font-medium"
                 value={selectedLoginUser}
                 onChange={(e) => setSelectedLoginUser(e.target.value)}
                 required
                 disabled={loading}
               >
-                <option value="">Seçiniz...</option>
+                <option value="" className="text-gray-400">Seçiniz...</option>
                 {users.map(u => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
+                  <option
+                    key={u.id}
+                    value={u.id}
+                    className="text-gray-900 font-normal py-2"
+                  >
+                    {u.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -522,9 +763,9 @@ export default function Home() {
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b shadow-sm">
         <div className={cn("p-4 text-white flex justify-between items-center",
           currentUser.role === 'admin' ? 'bg-indigo-600' :
-          currentUser.role === 'doctor' ? 'bg-teal-600' :
-          currentUser.role === 'banko' ? 'bg-amber-600' :
-          'bg-purple-600'
+            currentUser.role === 'doctor' ? 'bg-teal-600' :
+              currentUser.role === 'banko' ? 'bg-amber-600' :
+                'bg-purple-600'
         )}>
           <button
             onClick={() => setShowMobileSidebar(!showMobileSidebar)}
@@ -553,6 +794,8 @@ export default function Home() {
         />
       )}
 
+      <HelpButton userRole={currentUser.role} />
+
       {/* SIDEBAR */}
       <div className={cn(
         "bg-white border-r flex flex-col shadow-lg relative h-full transition-transform duration-300",
@@ -565,16 +808,16 @@ export default function Home() {
         {/* Header - Desktop only */}
         <div className={cn("hidden md:flex p-4 text-white justify-between items-center shadow-md",
           currentUser.role === 'admin' ? 'bg-indigo-600' :
-          currentUser.role === 'doctor' ? 'bg-teal-600' :
-          currentUser.role === 'banko' ? 'bg-amber-600' :
-          'bg-purple-600'
+            currentUser.role === 'doctor' ? 'bg-teal-600' :
+              currentUser.role === 'banko' ? 'bg-amber-600' :
+                'bg-purple-600'
         )}>
           <div>
             <h1 className="font-bold text-lg flex items-center gap-2">
               {currentUser.role === 'admin' ? <Shield size={18} /> :
-               currentUser.role === 'doctor' ? <Activity size={18} /> :
-               currentUser.role === 'banko' ? <User size={18} /> :
-               <Users size={18} />}
+                currentUser.role === 'doctor' ? <Activity size={18} /> :
+                  currentUser.role === 'banko' ? <User size={18} /> :
+                    <Users size={18} />}
               {currentUser.name}
             </h1>
             <p className="text-xs text-white opacity-80 flex items-center gap-1">
@@ -585,6 +828,9 @@ export default function Home() {
             <ThemeToggle />
             <button onClick={() => fetchData()} className="p-2 hover:bg-white/20 rounded-full transition" title="Yenile">
               <RefreshCcw size={18} />
+            </button>
+            <button onClick={() => setShowChangePasswordModal(true)} className="p-2 hover:bg-white/20 rounded-full transition" title="Şifremi Değiştir">
+              <Lock size={18} />
             </button>
             <button onClick={() => setCurrentUser(null)} className="p-2 hover:bg-white/20 rounded-full transition" title="Çıkış Yap">
               <LogOut size={18} />
@@ -599,13 +845,13 @@ export default function Home() {
               <h2 className="font-bold text-gray-800">{currentUser.name}</h2>
               <p className="text-xs text-gray-500 flex items-center gap-1">
                 {currentUser.role === 'admin' ? <Shield size={12} /> :
-                 currentUser.role === 'doctor' ? <Activity size={12} /> :
-                 currentUser.role === 'banko' ? <User size={12} /> :
-                 <Users size={12} />}
+                  currentUser.role === 'doctor' ? <Activity size={12} /> :
+                    currentUser.role === 'banko' ? <User size={12} /> :
+                      <Users size={12} />}
                 {currentUser.role === 'admin' ? 'ADMIN' :
-                 currentUser.role === 'doctor' ? 'HEKİM' :
-                 currentUser.role === 'banko' ? 'BANKO' :
-                 'ASİSTAN'}
+                  currentUser.role === 'doctor' ? 'HEKİM' :
+                    currentUser.role === 'banko' ? 'BANKO' :
+                      'ASİSTAN'}
               </p>
             </div>
             <button onClick={() => fetchData()} className="p-2 hover:bg-gray-100 rounded-full transition" title="Yenile">
@@ -677,7 +923,7 @@ export default function Home() {
               />
             </div>
             <button
-              onClick={() => setShowAddPatientModal(true)}
+              onClick={handleNewPatientClick}
               className="w-full bg-teal-600 text-white py-2 rounded-lg font-medium hover:bg-teal-700 transition flex justify-center items-center gap-2 shadow-sm"
             >
               <Plus size={18} /> Yeni Hasta Ekle
@@ -776,27 +1022,27 @@ export default function Home() {
                 <PatientReportButton patient={activePatient} treatments={activePatient.treatments || []} />
                 {((currentUser.role === 'admin' || currentUser.role === 'banko' || currentUser.role === 'asistan') ||
                   (currentUser.role === 'doctor' && activePatient.doctor_id === currentUser.id)) && (
-                  <button
-                    onClick={() => {
-                      setEditingPatient(activePatient);
-                      setShowEditPatientModal(true);
-                    }}
-                    className="text-gray-400 hover:text-blue-500 transition p-2"
-                    title="Hasta Bilgilerini Düzenle"
-                  >
-                    <Edit size={20} />
-                  </button>
-                )}
+                    <button
+                      onClick={() => {
+                        setEditingPatient(activePatient);
+                        setShowEditPatientModal(true);
+                      }}
+                      className="text-gray-400 hover:text-blue-500 transition p-2"
+                      title="Hasta Bilgilerini Düzenle"
+                    >
+                      <Edit size={20} />
+                    </button>
+                  )}
                 {hasPermission.deletePatient(currentUser.role) &&
                   (currentUser.role === 'admin' || activePatient.doctor_id === currentUser.id) && (
-                  <button
-                    onClick={() => handleDeletePatient(activePatient.id)}
-                    className="text-gray-400 hover:text-red-500 transition p-2"
-                    title="Hastayı Sil"
-                  >
-                    <Trash2 size={20} />
-                  </button>
-                )}
+                    <button
+                      onClick={() => handleDeletePatient(activePatient.id)}
+                      className="text-gray-400 hover:text-red-500 transition p-2"
+                      title="Hastayı Sil"
+                    >
+                      <Trash2 size={20} />
+                    </button>
+                  )}
               </div>
             </div>
 
@@ -805,48 +1051,25 @@ export default function Home() {
 
               {(hasPermission.addTreatment(currentUser.role) &&
                 ((currentUser.role === 'admin' || currentUser.role === 'asistan') ||
-                 (currentUser.role === 'doctor' && activePatient.doctor_id === currentUser.id))) && (
-                <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border mb-6">
-                  <h3 className="text-base md:text-lg font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                    <div className="bg-teal-100 p-1.5 rounded text-teal-700"><Plus size={18} /></div>
-                    Yeni İşlem Ekle
-                  </h3>
-                  <form onSubmit={handleAddTreatment} className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">Diş No</label>
-                        <input type="text" placeholder="16" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none" value={newTreatment.toothNo} onChange={e => setNewTreatment({ ...newTreatment, toothNo: e.target.value })} />
-                      </div>
-                      <div className="sm:col-span-2 lg:col-span-1">
-                        <label className="block text-xs font-medium text-gray-500 mb-1">Yapılan İşlem</label>
-                        <input type="text" placeholder="Kanal Tedavisi" required className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none" value={newTreatment.procedure} onChange={e => setNewTreatment({ ...newTreatment, procedure: e.target.value })} />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">Ücret (TL)</label>
-                        <input type="number" placeholder="0.00" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none" value={newTreatment.cost} onChange={e => setNewTreatment({ ...newTreatment, cost: e.target.value })} />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Notlar</label>
-                      <div className="flex gap-2">
-                        <input type="text" placeholder="Detay..." className="flex-1 p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none" value={newTreatment.notes} onChange={e => setNewTreatment({ ...newTreatment, notes: e.target.value })} />
-                        <VoiceInput onTranscript={(text) => setNewTreatment({ ...newTreatment, notes: newTreatment.notes + ' ' + text })} />
-                      </div>
-                    </div>
-                    <div className="flex justify-end">
-                      <button type="submit" disabled={loading} className="w-full sm:w-auto bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition shadow-sm font-medium disabled:opacity-50">
-                        {loading ? '...' : 'Kaydet'}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              )}
+                  (currentUser.role === 'doctor' && activePatient.doctor_id === currentUser.id))) && (
+                  <TreatmentForm
+                    currentUser={currentUser}
+                    selectedPatientId={selectedPatientId}
+                    onSuccess={() => {
+                      toast({ type: 'success', message: 'İşlem kaydedildi!' });
+                      fetchData();
+                    }}
+                    onError={(message) => toast({ type: 'error', message })}
+                    loading={loading}
+                    setLoading={setLoading}
+                  />
+                )}
 
               {hasPermission.addPayment(currentUser.role) && (
                 <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border mb-6">
                   <button
                     onClick={() => {
-                      setPaymentForm({...paymentForm, patient_id: activePatient.id});
+                      setPaymentForm({ ...paymentForm, patient_id: activePatient.id });
                       setShowPaymentModal(true);
                     }}
                     className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition shadow-sm font-medium"
@@ -886,14 +1109,14 @@ export default function Home() {
 
                       {(hasPermission.addTreatment(currentUser.role) &&
                         ((currentUser.role === 'admin' || currentUser.role === 'asistan') ||
-                         (currentUser.role === 'doctor' && activePatient.doctor_id === currentUser.id))) && (
-                        <button
-                          onClick={() => handleDeleteTreatment(t.id)}
-                          className="absolute bottom-4 right-4 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
+                          (currentUser.role === 'doctor' && activePatient.doctor_id === currentUser.id))) && (
+                          <button
+                            onClick={() => handleDeleteTreatment(t.id)}
+                            className="absolute bottom-4 right-4 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                     </div>
                   ))}
                 </div>
@@ -912,6 +1135,145 @@ export default function Home() {
       </div>
 
       {/* MODALS */}
+      {/* Doctor Selection Modal (for BANKO/ASISTAN) */}
+      {showDoctorSelectionModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-gray-800">Hekim Seçimi</h3>
+              <button
+                onClick={() => {
+                  setShowDoctorSelectionModal(false);
+                  setDoctorSelectionMethod(null);
+                  setSelectedDoctorForPatient('');
+                }}
+                className="text-gray-400 hover:text-gray-600 text-2xl"
+              >
+                &times;
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-600 mb-6">
+              Yeni hasta eklemeden önce hekim seçim yönteminizi belirleyin:
+            </p>
+
+            <div className="space-y-4">
+              {/* Option 1: Manual Selection */}
+              <div
+                onClick={() => setDoctorSelectionMethod('manual')}
+                className={cn(
+                  "border-2 rounded-xl p-5 cursor-pointer transition hover:shadow-lg",
+                  doctorSelectionMethod === 'manual'
+                    ? "border-teal-500 bg-teal-50"
+                    : "border-gray-200 hover:border-teal-300"
+                )}
+              >
+                <div className="flex items-start gap-4">
+                  <div className={cn(
+                    "w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-1",
+                    doctorSelectionMethod === 'manual'
+                      ? "border-teal-500 bg-teal-500"
+                      : "border-gray-300"
+                  )}>
+                    {doctorSelectionMethod === 'manual' && (
+                      <div className="w-2 h-2 bg-white rounded-full"></div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-bold text-lg text-gray-800 mb-2">
+                      Hekim Tercihi Var
+                    </h4>
+                    <p className="text-sm text-gray-600 mb-3">
+                      Hasta belirli bir hekimi talep ediyor veya tercih ediyor
+                    </p>
+                    {doctorSelectionMethod === 'manual' && (
+                      <div className="mt-3">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Hekim Seçin *
+                        </label>
+                        <select
+                          value={selectedDoctorForPatient}
+                          onChange={(e) => setSelectedDoctorForPatient(e.target.value)}
+                          className="w-full p-3 border border-teal-300 rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none bg-white"
+                          required
+                        >
+                          <option value="">Hekim Seçiniz...</option>
+                          {users.filter(u => u.role === 'doctor').map(doc => (
+                            <option key={doc.id} value={doc.id}>{doc.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Option 2: Queue Assignment */}
+              <div
+                onClick={() => setDoctorSelectionMethod('queue')}
+                className={cn(
+                  "border-2 rounded-xl p-5 cursor-pointer transition hover:shadow-lg",
+                  doctorSelectionMethod === 'queue'
+                    ? "border-amber-500 bg-amber-50"
+                    : "border-gray-200 hover:border-amber-300"
+                )}
+              >
+                <div className="flex items-start gap-4">
+                  <div className={cn(
+                    "w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-1",
+                    doctorSelectionMethod === 'queue'
+                      ? "border-amber-500 bg-amber-500"
+                      : "border-gray-300"
+                  )}>
+                    {doctorSelectionMethod === 'queue' && (
+                      <div className="w-2 h-2 bg-white rounded-full"></div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-bold text-lg text-gray-800 mb-2">
+                      Sıradaki Hekime Ata
+                    </h4>
+                    <p className="text-sm text-gray-600 mb-2">
+                      Sistem otomatik olarak günlük sıradaki hekime atama yapar
+                    </p>
+                    {queueData && (
+                      <div className="mt-3 p-3 bg-white border border-amber-200 rounded-lg">
+                        <p className="text-sm font-semibold text-amber-800">
+                          📋 Sıradaki Hekim:{' '}
+                          <span className="text-amber-900">
+                            {getNextDoctorInQueue()?.name || 'Yükleniyor...'}
+                          </span>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6 pt-4 border-t">
+              <button
+                onClick={() => {
+                  setShowDoctorSelectionModal(false);
+                  setDoctorSelectionMethod(null);
+                  setSelectedDoctorForPatient('');
+                }}
+                className="flex-1 py-3 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 text-base transition"
+              >
+                İptal
+              </button>
+              <button
+                onClick={handleDoctorSelectionConfirm}
+                disabled={!doctorSelectionMethod || (doctorSelectionMethod === 'manual' && !selectedDoctorForPatient)}
+                className="flex-1 bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 text-base disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                Devam Et
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showAddPatientModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-5 md:p-6 max-h-[90vh] overflow-y-auto">
@@ -928,20 +1290,12 @@ export default function Home() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Telefon</label>
                 <input type="tel" placeholder="Telefon" className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none" value={newPatient.phone} onChange={e => setNewPatient({ ...newPatient, phone: e.target.value })} />
               </div>
-              {(currentUser.role === 'banko' || currentUser.role === 'asistan') && (
+              {(currentUser.role === 'banko' || currentUser.role === 'asistan') && selectedDoctorForPatient && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Hekim Seç *</label>
-                  <select
-                    value={selectedDoctorForPatient}
-                    onChange={(e) => setSelectedDoctorForPatient(e.target.value)}
-                    className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none"
-                    required
-                  >
-                    <option value="">Hekim Seçiniz...</option>
-                    {users.filter(u => u.role === 'doctor').map(doc => (
-                      <option key={doc.id} value={doc.id}>{doc.name}</option>
-                    ))}
-                  </select>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Seçilen Hekim</label>
+                  <div className="w-full p-3 border border-teal-200 bg-teal-50 rounded-lg text-base font-semibold text-teal-800">
+                    {users.find(u => u.id === selectedDoctorForPatient)?.name || 'Bilinmiyor'}
+                  </div>
                 </div>
               )}
               {hasPermission.editAnamnez(currentUser.role) && (
@@ -998,7 +1352,7 @@ export default function Home() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Hasta *</label>
                 <select
                   value={paymentForm.patient_id}
-                  onChange={(e) => setPaymentForm({...paymentForm, patient_id: e.target.value})}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, patient_id: e.target.value })}
                   className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-amber-500 outline-none"
                   required
                 >
@@ -1015,7 +1369,7 @@ export default function Home() {
                   type="number"
                   step="0.01"
                   value={paymentForm.payment_amount}
-                  onChange={(e) => setPaymentForm({...paymentForm, payment_amount: Number(e.target.value)})}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, payment_amount: Number(e.target.value) })}
                   className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-amber-500 outline-none"
                   placeholder="0.00"
                   required
@@ -1026,7 +1380,7 @@ export default function Home() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Durum *</label>
                 <select
                   value={paymentForm.payment_status}
-                  onChange={(e) => setPaymentForm({...paymentForm, payment_status: e.target.value as PaymentStatus})}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, payment_status: e.target.value as PaymentStatus })}
                   className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-amber-500 outline-none"
                 >
                   <option value="paid">Tam Ödendi</option>
@@ -1038,7 +1392,7 @@ export default function Home() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Not</label>
                 <textarea
                   value={paymentForm.payment_note}
-                  onChange={(e) => setPaymentForm({...paymentForm, payment_note: e.target.value})}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, payment_note: e.target.value })}
                   className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-amber-500 outline-none"
                   rows={3}
                   placeholder="Ödeme notu (isteğe bağlı)"
@@ -1059,6 +1413,106 @@ export default function Home() {
                   className="flex-1 bg-amber-600 text-white py-3 rounded-lg font-bold hover:bg-amber-700 text-base disabled:opacity-50"
                 >
                   {loading ? 'Kaydediliyor...' : 'Kaydet'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Password Change Modal */}
+      {showChangePasswordModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                <Lock size={20} className="text-teal-600" />
+                Şifre Değiştir
+              </h3>
+              <button
+                onClick={() => {
+                  setShowChangePasswordModal(false);
+                  setCurrentPin('');
+                  setNewPin('');
+                  setConfirmPin('');
+                }}
+                className="text-gray-400 hover:text-gray-600 text-2xl"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mevcut PIN
+                </label>
+                <input
+                  type="password"
+                  placeholder="****"
+                  value={currentPin}
+                  onChange={(e) => setCurrentPin(e.target.value)}
+                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-center tracking-widest"
+                  required
+                  maxLength={6}
+                  autoComplete="current-password"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Yeni PIN
+                </label>
+                <input
+                  type="password"
+                  placeholder="****"
+                  value={newPin}
+                  onChange={(e) => setNewPin(e.target.value)}
+                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-center tracking-widest"
+                  required
+                  minLength={4}
+                  maxLength={6}
+                  autoComplete="new-password"
+                />
+                <p className="text-xs text-gray-500 mt-1">En az 4 haneli olmalıdır</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Yeni PIN (Tekrar)
+                </label>
+                <input
+                  type="password"
+                  placeholder="****"
+                  value={confirmPin}
+                  onChange={(e) => setConfirmPin(e.target.value)}
+                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-center tracking-widest"
+                  required
+                  minLength={4}
+                  maxLength={6}
+                  autoComplete="new-password"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowChangePasswordModal(false);
+                    setCurrentPin('');
+                    setNewPin('');
+                    setConfirmPin('');
+                  }}
+                  className="flex-1 py-3 border rounded-lg font-medium hover:bg-gray-50"
+                >
+                  İptal
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 disabled:opacity-50"
+                >
+                  {loading ? 'Kaydediliyor...' : 'Değiştir'}
                 </button>
               </div>
             </form>
@@ -1118,15 +1572,29 @@ export default function Home() {
                         <span className="font-medium text-gray-800">{doctor.name}</span>
                         <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-semibold",
                           doctor.role === 'doctor' ? 'bg-teal-100 text-teal-700' :
-                          doctor.role === 'banko' ? 'bg-amber-100 text-amber-700' :
-                          'bg-purple-100 text-purple-700'
+                            doctor.role === 'banko' ? 'bg-amber-100 text-amber-700' :
+                              'bg-purple-100 text-purple-700'
                         )}>
                           {doctor.role === 'doctor' ? 'HEKİM' :
-                           doctor.role === 'banko' ? 'BANKO' :
-                           'ASİSTAN'}
+                            doctor.role === 'banko' ? 'BANKO' :
+                              'ASİSTAN'}
                         </span>
                       </div>
-                      <span className="text-xs text-gray-400 font-mono tracking-wider">PIN: {doctor.pin}</span>
+                      <div className="space-y-1">
+                        <span className="text-xs text-gray-400 font-mono tracking-wider">PIN: {doctor.pin}</span>
+                        <div className="text-xs text-gray-500">
+                          Son şifre değişikliği:{' '}
+                          {passwordChanges[doctor.id]
+                            ? new Date(passwordChanges[doctor.id]).toLocaleString('tr-TR', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })
+                            : 'Hiç değiştirilmedi'}
+                        </div>
+                      </div>
                     </div>
                     <div className="flex gap-2 opacity-80 group-hover:opacity-100 transition">
                       <button onClick={() => { setEditingDoctorId(doctor.id); setNewDoctor({ name: doctor.name, pin: doctor.pin, role: doctor.role }); }} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-full transition" title="Düzenle">
@@ -1145,6 +1613,9 @@ export default function Home() {
       )}
 
       <AIAssistant />
+
+      {/* Yardım Sistemi */}
+
     </div>
   );
 }

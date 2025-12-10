@@ -1,15 +1,16 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     BarChart, Bar, PieChart, Pie, Cell
 } from 'recharts';
 import {
     Users, Activity, TrendingUp, Calendar,
-    Wallet, ClipboardList, Download
+    Wallet, ClipboardList, Download, RotateCcw
 } from 'lucide-react';
 import { ExportButtons } from './ReportExport';
+import { supabase } from '@/lib/supabase';
 
 type DoctorRole = 'admin' | 'doctor' | 'banko' | 'asistan';
 type PaymentStatus = 'pending' | 'paid' | 'partial';
@@ -36,6 +37,9 @@ interface Patient {
     phone: string;
     anamnez: string;
     updated_at: string;
+    created_at?: string;
+    assignment_type?: 'queue' | 'preference';
+    assignment_date?: string;
 }
 
 interface Doctor {
@@ -52,9 +56,82 @@ interface DashboardProps {
     currentUser: Doctor;
 }
 
+interface QueueData {
+    id: string;
+    date: string;
+    queue_order: string[];
+    current_index: number;
+}
+
 const COLORS = ['#0d9488', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
 export default function Dashboard({ patients, treatments, doctors, currentUser }: DashboardProps) {
+    const [queueData, setQueueData] = useState<QueueData | null>(null);
+    const [loadingQueue, setLoadingQueue] = useState(false);
+
+    // Fetch today's queue data
+    useEffect(() => {
+        if (currentUser.role === 'admin') {
+            fetchQueueData();
+        }
+    }, [currentUser]);
+
+    const fetchQueueData = async () => {
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const { data, error } = await supabase
+                .from('doctor_queue')
+                .select('*')
+                .eq('date', today)
+                .single();
+
+            if (!error && data) {
+                setQueueData(data);
+            }
+        } catch (err) {
+            console.error('Error fetching queue data:', err);
+        }
+    };
+
+    const handleResetQueue = async () => {
+        if (!confirm('Günlük sırayı sıfırlamak istediğinize emin misiniz? Bu işlem sırayı başa alacaktır.')) {
+            return;
+        }
+
+        setLoadingQueue(true);
+        try {
+            const today = new Date().toISOString().split('T')[0];
+
+            // Delete existing queue for today
+            await supabase.from('doctor_queue').delete().eq('date', today);
+
+            // Create new queue with randomized order
+            const activeDoctors = doctors.filter(d => d.role === 'doctor');
+            const shuffled = [...activeDoctors].sort(() => Math.random() - 0.5);
+            const queueOrder = shuffled.map(d => d.id);
+
+            const { data, error } = await supabase
+                .from('doctor_queue')
+                .insert({
+                    date: today,
+                    queue_order: queueOrder,
+                    current_index: 0
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            setQueueData(data);
+            alert('Sıra başarıyla sıfırlandı!');
+        } catch (err) {
+            console.error('Error resetting queue:', err);
+            alert('Sıra sıfırlanırken hata oluştu.');
+        } finally {
+            setLoadingQueue(false);
+        }
+    };
+
     // Filter data based on role
     // ADMIN, BANKO, ASISTAN see all patients
     // HEKİM (doctor) sees only own patients
@@ -64,6 +141,43 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
         }
         return patients.filter(p => p.doctor_id === currentUser.id);
     }, [patients, currentUser]);
+
+    // Helper function to check if date is today
+    const isToday = (dateStr: string | undefined): boolean => {
+        if (!dateStr) return false;
+        const date = new Date(dateStr);
+        const today = new Date();
+        return date.toDateString() === today.toDateString();
+    };
+
+    // Calculate today's doctor distribution statistics
+    const todayDoctorStats = useMemo(() => {
+        const stats: Record<string, { queue: number; preference: number; total: number; doctorName: string }> = {};
+
+        // Initialize stats for all doctors
+        doctors.filter(d => d.role === 'doctor').forEach(doc => {
+            stats[doc.id] = { queue: 0, preference: 0, total: 0, doctorName: doc.name };
+        });
+
+        // Count patients added today
+        patients.forEach(p => {
+            if (isToday(p.created_at || p.assignment_date)) {
+                if (stats[p.doctor_id]) {
+                    stats[p.doctor_id].total++;
+                    if (p.assignment_type === 'queue') {
+                        stats[p.doctor_id].queue++;
+                    } else {
+                        stats[p.doctor_id].preference++;
+                    }
+                }
+            }
+        });
+
+        return Object.entries(stats).map(([id, data]) => ({
+            doctorId: id,
+            ...data
+        }));
+    }, [patients, doctors]);
 
     const filteredTreatments = useMemo(() => {
         const patientIds = new Set(filteredPatients.map(p => p.id));
@@ -188,6 +302,154 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
                     color="bg-emerald-500"
                 />
             </div>
+
+            {/* Daily Doctor Distribution - Admin Only */}
+            {currentUser.role === 'admin' && (
+                <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-slate-700">
+                    <div className="mb-4">
+                        <h3 className="text-base md:text-lg font-semibold text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                            <Users size={20} className="text-indigo-500" />
+                            Bugünün Hekim Dağılımı
+                        </h3>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {new Date().toLocaleDateString('tr-TR', {
+                                weekday: 'long',
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                            })}
+                        </p>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="border-b border-gray-200 dark:border-slate-600">
+                                    <th className="text-left py-3 px-2 text-sm font-semibold text-gray-700 dark:text-gray-200">Hekim</th>
+                                    <th className="text-center py-3 px-2 text-sm font-semibold text-gray-700 dark:text-gray-200">Sıradan</th>
+                                    <th className="text-center py-3 px-2 text-sm font-semibold text-gray-700 dark:text-gray-200">Referanslı</th>
+                                    <th className="text-center py-3 px-2 text-sm font-semibold text-gray-700 dark:text-gray-200">Toplam</th>
+                                    <th className="text-center py-3 px-2 text-sm font-semibold text-gray-700 dark:text-gray-200">Dağılım</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {todayDoctorStats.map((stat, idx) => {
+                                    const maxTotal = Math.max(...todayDoctorStats.map(s => s.total), 1);
+                                    const queuePercent = stat.total > 0 ? (stat.queue / stat.total) * 100 : 0;
+                                    const prefPercent = stat.total > 0 ? (stat.preference / stat.total) * 100 : 0;
+
+                                    return (
+                                        <tr key={stat.doctorId} className="border-b border-gray-100 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition">
+                                            <td className="py-4 px-2">
+                                                <div className="flex items-center gap-2">
+                                                    <div
+                                                        className="w-3 h-3 rounded-full flex-shrink-0"
+                                                        style={{ backgroundColor: COLORS[idx % COLORS.length] }}
+                                                    />
+                                                    <span className="font-medium text-gray-800 dark:text-gray-100">
+                                                        {stat.doctorName}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="text-center py-4 px-2">
+                                                <span className="inline-flex items-center justify-center bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 font-bold px-3 py-1 rounded-full text-sm min-w-[40px]">
+                                                    {stat.queue}
+                                                </span>
+                                            </td>
+                                            <td className="text-center py-4 px-2">
+                                                <span className="inline-flex items-center justify-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-bold px-3 py-1 rounded-full text-sm min-w-[40px]">
+                                                    {stat.preference}
+                                                </span>
+                                            </td>
+                                            <td className="text-center py-4 px-2">
+                                                <span className="inline-flex items-center justify-center bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-bold px-4 py-1.5 rounded-full text-base min-w-[50px]">
+                                                    {stat.total}
+                                                </span>
+                                            </td>
+                                            <td className="py-4 px-2">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex-1 h-8 bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden relative">
+                                                        {stat.total > 0 ? (
+                                                            <>
+                                                                <div
+                                                                    className="absolute left-0 top-0 h-full bg-amber-400 dark:bg-amber-500 transition-all duration-300"
+                                                                    style={{ width: `${queuePercent}%` }}
+                                                                />
+                                                                <div
+                                                                    className="absolute top-0 h-full bg-blue-400 dark:bg-blue-500 transition-all duration-300"
+                                                                    style={{
+                                                                        left: `${queuePercent}%`,
+                                                                        width: `${prefPercent}%`
+                                                                    }}
+                                                                />
+                                                            </>
+                                                        ) : (
+                                                            <div className="flex items-center justify-center h-full text-xs text-gray-400 dark:text-gray-500">
+                                                                Hasta yok
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[45px] text-right">
+                                                        {((stat.total / maxTotal) * 100).toFixed(0)}%
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Legend */}
+                    <div className="flex items-center justify-center gap-6 mt-6 pt-4 border-t border-gray-200 dark:border-slate-600">
+                        <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 bg-amber-400 dark:bg-amber-500 rounded"></div>
+                            <span className="text-sm text-gray-600 dark:text-gray-300">Sıradan Hasta</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 bg-blue-400 dark:bg-blue-500 rounded"></div>
+                            <span className="text-sm text-gray-600 dark:text-gray-300">Referanslı Hasta</span>
+                        </div>
+                    </div>
+
+                    {/* Queue Status and Reset */}
+                    {queueData && (
+                        <div className="mt-6 pt-4 border-t border-gray-200 dark:border-slate-600">
+                            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-indigo-100 dark:bg-indigo-900/30 p-3 rounded-lg">
+                                        <Activity size={20} className="text-indigo-600 dark:text-indigo-400" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            Şu An Sırada
+                                        </p>
+                                        <p className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
+                                            {(() => {
+                                                const currentDoctorId = queueData.queue_order[queueData.current_index];
+                                                const currentDoctor = doctors.find(d => d.id === currentDoctorId);
+                                                return currentDoctor ? currentDoctor.name : 'Bilinmiyor';
+                                            })()}
+                                            <span className="text-sm font-normal text-gray-500 dark:text-gray-400 ml-2">
+                                                ({queueData.current_index + 1}/{queueData.queue_order.length})
+                                            </span>
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={handleResetQueue}
+                                    disabled={loadingQueue}
+                                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-200 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <RotateCcw size={16} className={loadingQueue ? 'animate-spin' : ''} />
+                                    {loadingQueue ? 'Sıfırlanıyor...' : 'Sırayı Sıfırla'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Monthly Revenue Chart */}
             <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-slate-700">

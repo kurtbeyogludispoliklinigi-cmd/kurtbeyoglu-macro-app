@@ -1,115 +1,54 @@
-# 🦷 DentistNote Pro - Diş Klinik Yönetim Sistemi
 
-**Diş hekimleri için geliştirilen, hastalarınızı ve tedavilerinizi kolayca takip etmenizi sağlayan online uygulama.**
+# 🦷 Kurtbeyoğlu Diş Kliniği - Yönetim Sistemi
 
----
+**Version 2.0.0** - Modern diş kliniği yönetim yazılımı
 
-## 📱 Bu Uygulama Ne İşe Yarar?
+Özellikler:
+- ✅ Hasta takibi ve kayıt yönetimi
+- ✅ Tedavi fiyat kataloğu ve otomatik indirim hesaplama
+- ✅ Akıllı hekim atama sistemi (Queue-based)
+- ✅ Randevu yönetimi
+- ✅ Dashboard ve raporlama
+- ✅ **Uygulama içi yardım sistemi** (Yeni! 🎉)
+- ✅ Şifre yönetimi ve güvenlik logları
 
-DentistNote Pro, diş kliniklerinde günlük işleri kolaylaştırmak için tasarlanmış bir yazılımdır. İnternet tarayıcınızdan (Chrome, Safari vb.) açarak kullanabilirsiniz - bilgisayar veya telefon fark etmez!
+## 🚀 Hızlı Başlangıç
 
----
+```bash
+# Kurulum
+npm install
 
-## ✨ Neler Yapabilirsiniz?
+# Geliştirme Modu
+npm run dev
+```
 
-### 👥 Hasta Yönetimi
-- **Yeni hasta kartı açma** - İsim, telefon ve geçmiş hastalıkları kaydedin
-- **Hasta arama** - İsim veya telefon numarasıyla hızlıca bulun
-- **Hasta listeleme** - Tüm hastalarınızı tarih sırasına göre görün
+Tarayıcınızda `http://localhost:3000` adresine gidin.
 
-### 🦷 Tedavi Takibi
-- **İşlem kaydetme** - Hangi dişe ne yaptığınızı kaydedin
-- **Ücret girişi** - Her işlemin fiyatını not edin
-- **Tedavi geçmişi** - Hastanın tüm geçmiş işlemlerini görün
+## 📚 Dokümantasyon
 
-### 📅 Randevu Sistemi
-- **Randevu oluşturma** - Gün ve saat belirleyin
-- **Takvim görünümü** - Günlük randevularınızı listeleyin
-- **Durum takibi** - Bekliyor, tamamlandı, iptal olarak işaretleyin
+**Son Kullanıcılar İçin:**
+- Uygulama içinde sağ alttaki **"?" (Yardım)** butonuna tıklayın.
+- Yardım merkezi; giriş yapma, hasta ekleme ve ödeme alma gibi tüm süreçleri görsel olarak anlatır.
 
-### 🤖 Yapay Zeka Asistanı (Gemini)
-Ekranın sağ alt köşesindeki **"Asistan"** butonuna tıklayarak:
-- "Bugün kaç hasta gördüm?"
-- "Bu ay ne kadar ciro yaptım?"
-- "En çok hangi işlemi yapıyorum?"
+**Geliştiriciler İçin:**
+- Teknik dokümantasyon: `CLAUDE.md`
+- Veritabanı kurulumu: `migrations/initial_setup.sql`
 
-gibi sorular sorabilirsiniz. Yapay zeka size anında cevap verir!
+## 🗂️ Proje Yapısı
 
-### 🎤 Sesle Not Alma
-Tedavi notlarını **konuşarak** girebilirsiniz! Mikrofon simgesine tıklayın, konuşun - yazı otomatik oluşur.
+- **`/src/app`**: Next.js App Router sayfaları.
+- **`/src/components`**: Yeniden kullanılabilir UI bileşenleri (`HelpModal`, `TreatmentForm` vb.).
+- **`/src/hooks`**: Custom React hooks (`useTreatmentCatalog`, `useAppointments`).
+- **`/src/lib`**: Yardımcı kütüphaneler (Supabase client).
 
-### 📊 Dashboard (Kontrol Paneli)
-Tek bir ekranda:
-- Bu ayki toplam ciro
-- Kaç hasta görüldü
-- Günlük hasta grafiği
-- En çok yapılan işlemler
+## 🔧 Kurulum Gereksinimleri
 
-### 📄 Rapor Çıktısı
-Her hasta için **PDF rapor** oluşturabilirsiniz - yazdırmak veya e-posta ile göndermek için ideal!
+1. Node.js 18+
+2. Supabase projesi
+3. `.env.local` dosyası (Supabase URL ve Key ile)
 
-### 🌙 Karanlık Mod
-Göz yormayan karanlık tema seçeneği mevcut - gece çalışanlar için ideal!
+## 📞 Destek
 
----
-
-## 👤 Kullanıcı Tipleri
-
-| Kullanıcı | Yetkisi |
-|-----------|---------|
-| **Admin** | Tüm hastaları görür, hekim ekler/siler, tüm istatistiklere erişir |
-| **Hekim (Doktor)** | Sadece kendi hastalarını görür ve yönetir |
-
----
-
-## 🔐 Nasıl Giriş Yapılır?
-
-1. Uygulamayı açın
-2. Kullanıcı listesinden isminizi seçin
-3. Size verilen **4-6 haneli PIN şifresini** girin
-4. "Giriş Yap" butonuna tıklayın
-
----
-
-## 📲 Telefondan Kullanım
-
-Uygulama telefon ve tabletten de rahatlıkla kullanılabilir. Hatta ana ekrana ekleyerek normal bir uygulama gibi açabilirsiniz!
-
-**iPhone için:**
-1. Safari'de uygulamayı açın
-2. Paylaş butonuna (kutu + ok) tıklayın
-3. "Ana Ekrana Ekle" seçin
-
-**Android için:**
-1. Chrome'da uygulamayı açın
-2. Üç nokta menüsüne tıklayın
-3. "Ana ekrana ekle" seçin
-
----
-
-## ⚡ Önemli Bilgiler
-
-- 📡 **İnternet gerekli** - Veriler bulutta saklanır
-- 🔄 **Anlık güncelleme** - Başka biri veri eklerse anında görürsünüz
-- 💾 **Otomatik kayıt** - Kaydet butonuna bastığınızda anında kaydedilir
-- 🔒 **Güvenli** - Şifre ile korumalı
-
----
-
-## 🆘 Sorun Mu Yaşıyorsunuz?
-
-| Sorun | Çözüm |
-|-------|-------|
-| Giriş yapamıyorum | PIN şifresini kontrol edin |
-| Sayfa açılmıyor | İnternet bağlantınızı kontrol edin |
-| Veri görünmüyor | Sağ üstteki yenile butonuna (↻) tıklayın |
-
----
-
-## 📞 İletişim
-
-Teknik destek için uygulama yöneticinize başvurun.
-
----
-
-*DentistNote Pro v2.0 - Klinik Yönetim Sistemi*
+Sorun yaşıyorsanız:
+1. Uygulama içi "Yardım" bölümünü kontrol edin.
+2. `CLAUDE.md` dosyasındaki "Sorun Giderme" başlığına bakın.

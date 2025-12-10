@@ -22,6 +22,9 @@ export interface Patient {
     phone: string;
     anamnez: string;
     updated_at: string;
+    created_at?: string;
+    assignment_type?: 'queue' | 'preference';
+    assignment_date?: string;
     treatments?: Treatment[];
 }
 
@@ -37,6 +40,16 @@ export interface Treatment {
     payment_status?: PaymentStatus;
     payment_amount?: number;
     payment_note?: string | null;
+}
+
+export interface TreatmentCatalogItem {
+    id: string;
+    name: string;
+    standard_price: number;
+    category?: string | null;
+    created_by?: string | null;
+    created_at: string;
+    last_updated: string;
 }
 
 export function useAppData() {
