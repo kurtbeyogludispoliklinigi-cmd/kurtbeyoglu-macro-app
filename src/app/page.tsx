@@ -854,9 +854,17 @@ export default function Home() {
                       'ASİSTAN'}
               </p>
             </div>
-            <button onClick={() => fetchData()} className="p-2 hover:bg-gray-100 rounded-full transition" title="Yenile">
-              <RefreshCcw size={18} className="text-gray-600" />
-            </button>
+            <div className="flex gap-1">
+              <button onClick={() => fetchData()} className="p-2 hover:bg-gray-100 rounded-full transition" title="Yenile">
+                <RefreshCcw size={18} className="text-gray-600" />
+              </button>
+              <button onClick={() => setShowChangePasswordModal(true)} className="p-2 hover:bg-gray-100 rounded-full transition" title="Şifremi Değiştir">
+                <Lock size={18} className="text-gray-600" />
+              </button>
+              <button onClick={() => setCurrentUser(null)} className="p-2 hover:bg-gray-100 rounded-full transition" title="Çıkış Yap">
+                <LogOut size={18} className="text-gray-600" />
+              </button>
+            </div>
           </div>
         </div>
 
