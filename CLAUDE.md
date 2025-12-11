@@ -131,6 +131,10 @@ const hasPermission = {
 - `doctor_queue`: Günlük hekim sırası (queue_order, last_assigned_at)
 - `treatment_catalog`: Fiyat kütüphanesi (name UNIQUE, standard_price)
 - `password_change_log`: Şifre değişiklik takibi (user_id, changed_by_user_id)
+- `patient_images`: Hasta röntgen/fotoğraf arşivi (storage path, film_type)
+
+**Storage Buckets:**
+- `patient-images`: Hasta filmleri (Authenticated users only, max 10MB)
 
 **Migration**: `migrations/initial_setup.sql` dosyası Supabase SQL Editor'de çalıştırılmalı.
 

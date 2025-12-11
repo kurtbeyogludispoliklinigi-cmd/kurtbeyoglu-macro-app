@@ -19,6 +19,7 @@ import { AppointmentModal } from '@/components/AppointmentModal';
 import { AppointmentList } from '@/components/AppointmentList';
 import { TreatmentForm } from '@/components/TreatmentForm';
 import { HelpButton } from '@/components/HelpModal';
+import { PatientImageGallery } from '@/components/PatientImageGallery';
 
 // Helper for classes
 function cn(...inputs: (string | undefined | null | false)[]) {
@@ -1025,6 +1026,11 @@ export default function Home() {
                     <User size={14} /> Hekim: {activePatient.doctor_name}
                   </span>
                 </div>
+
+                <div className="mt-4">
+                  <PatientImageGallery patientId={activePatient.id} currentUser={currentUser} />
+                </div>
+
                 {activePatient.anamnez && (
                   <div className="mt-3 p-2 md:p-3 bg-red-50 text-red-700 text-xs md:text-sm rounded-lg border border-red-100">
                     <strong>⚠️ Anamnez:</strong> {activePatient.anamnez}
