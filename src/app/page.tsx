@@ -1023,7 +1023,7 @@ export default function Home() {
                     <Phone size={14} /> {activePatient.phone}
                   </span>
                   <span className="flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 md:px-3 py-1 rounded-full">
-                    <User size={14} /> Hekim: {activePatient.doctor_name}
+                    <User size={14} /> Sorumlu: {activePatient.doctor_name}
                   </span>
                 </div>
 
