@@ -249,7 +249,8 @@ export default function Home() {
 
   const filteredPatients = useMemo(() => {
     let list = patientsWithTreatments;
-    if (currentUser && currentUser.role !== 'admin') {
+    // Only doctors (hekim) see filtered patients, others (admin, banko, asistan) see all
+    if (currentUser && !hasPermission.viewAllPatients(currentUser.role)) {
       list = list.filter((p: Patient) => p.doctor_id === currentUser.id);
     }
     return list.filter((p: Patient) =>
@@ -278,9 +279,14 @@ export default function Home() {
       }
 
       // Create new queue for today with randomized doctor order
-      const doctors = users.filter(u => u.role === 'doctor');
+      // Exclude specific doctors from queue (Dt. Barış ve Dt. Salih)
+      const doctors = users.filter(u =>
+        u.role === 'doctor' &&
+        u.name !== 'Dt. Barış' &&
+        u.name !== 'Dt. Salih'
+      );
       if (doctors.length === 0) {
-        toast({ type: 'error', message: 'Hekim bulunamadı!' });
+        toast({ type: 'error', message: 'Sıraya eklenebilecek hekim bulunamadı!' });
         return null;
       }
 
