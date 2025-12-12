@@ -122,7 +122,7 @@ export function InstallPrompt() {
                                 </div>
                             ) : (
                                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                                    DentistNote&apos;u ana ekranınıza ekleyerek daha hızlı erişin.
+                                    Özel Kurtbeyoğlu App uygulamasını ana ekranınıza ekleyerek daha hızlı erişin.
                                 </p>
                             )}
                         </div>

@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Kurtbeyoğlu Ağız ve Diş Sağlığı Polikliniği",
-  description: "Kurtbeyoğlu Ağız ve Diş Sağlığı Polikliniği - Modern diş kliniği yönetim sistemi",
+  title: "Özel Kurtbeyoğlu Ağız ve Diş Sağlığı Polikliniği",
+  description: "Özel Kurtbeyoğlu Ağız ve Diş Sağlığı Polikliniği - Hasta Takip Sistemi",
   manifest: "/manifest.json",
 };
 
