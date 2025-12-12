@@ -48,6 +48,12 @@ export function TreatmentForm({
     notes: ''
   });
 
+  // Treatment mode state
+  const [treatmentMode, setTreatmentMode] = useState<'planned' | 'completed'>('completed');
+  const [plannedDate, setPlannedDate] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  );
+
   // Catalog state
   const [priceSuggestion, setPriceSuggestion] = useState<{
     isNew: boolean;
@@ -137,15 +143,27 @@ export function TreatmentForm({
           : `[${discountInfo.discountNote}]`;
       }
 
-      // Insert treatment
-      const { error } = await supabase.from('treatments').insert({
+      // Prepare treatment data with status fields
+      const treatmentData: any = {
         patient_id: selectedPatientId,
         tooth_no: formData.toothNo,
         procedure: formData.procedure,
         cost: Number(formData.cost) || 0,
         notes: finalNotes,
-        added_by: currentUser.name
-      });
+        added_by: currentUser.name,
+        status: treatmentMode
+      };
+
+      // Add mode-specific fields
+      if (treatmentMode === 'planned') {
+        treatmentData.planned_date = plannedDate;
+        treatmentData.planned_by = currentUser.name;
+      } else {
+        treatmentData.completed_date = new Date().toISOString();
+      }
+
+      // Insert treatment
+      const { error } = await supabase.from('treatments').insert(treatmentData);
 
       if (error) throw error;
 
@@ -159,6 +177,8 @@ export function TreatmentForm({
       setFormData({ toothNo: '', procedure: '', cost: '', notes: '' });
       setPriceSuggestion({ isNew: true, standardPrice: null });
       setShowNewTreatmentWarning(false);
+      setTreatmentMode('completed');
+      setPlannedDate(new Date().toISOString().split('T')[0]);
 
       onSuccess();
     } catch (error) {
@@ -176,6 +196,48 @@ export function TreatmentForm({
         </div>
         Yeni İşlem Ekle
       </h3>
+
+      {/* Treatment Mode Selection */}
+      <div className="mb-4 flex gap-3 p-3 bg-gray-50 rounded-lg">
+        <button
+          type="button"
+          onClick={() => setTreatmentMode('completed')}
+          className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${
+            treatmentMode === 'completed'
+              ? 'bg-teal-600 text-white shadow'
+              : 'bg-white text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          ✓ Yapılan İşlem
+        </button>
+        <button
+          type="button"
+          onClick={() => setTreatmentMode('planned')}
+          className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${
+            treatmentMode === 'planned'
+              ? 'bg-blue-600 text-white shadow'
+              : 'bg-white text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          📅 Planlanan İşlem
+        </button>
+      </div>
+
+      {/* Planned Date Field (conditional) */}
+      {treatmentMode === 'planned' && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <label className="block text-xs font-medium text-blue-700 mb-1">
+            Planlanan Tarih
+          </label>
+          <input
+            type="date"
+            value={plannedDate}
+            onChange={(e) => setPlannedDate(e.target.value)}
+            className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+            required
+          />
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

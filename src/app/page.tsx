@@ -51,6 +51,8 @@ interface Patient {
   treatments?: Treatment[];
 }
 
+type TreatmentStatus = 'planned' | 'completed' | 'cancelled';
+
 interface Treatment {
   id: string;
   patient_id: string;
@@ -63,6 +65,11 @@ interface Treatment {
   payment_status?: PaymentStatus;
   payment_amount?: number;
   payment_note?: string | null;
+  // Treatment planning fields
+  status: TreatmentStatus;
+  planned_date?: string | null;
+  completed_date?: string | null;
+  planned_by?: string | null;
 }
 
 // --- PERMISSION HELPER ---
@@ -73,8 +80,11 @@ const hasPermission = {
   editAnamnez: (role: DoctorRole) =>
     role === 'admin' || role === 'doctor' || role === 'asistan',
 
+  editPatient: (role: DoctorRole) =>
+    role === 'admin' || role === 'doctor' || role === 'asistan',
+
   deletePatient: (role: DoctorRole) =>
-    role === 'admin' || role === 'doctor',
+    role === 'admin' || role === 'doctor' || role === 'asistan',
 
   addTreatment: (role: DoctorRole) =>
     role === 'admin' || role === 'doctor' || role === 'asistan',
@@ -109,6 +119,7 @@ export default function Home() {
   // Selection
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [treatmentFilter, setTreatmentFilter] = useState<'all' | 'planned' | 'completed'>('all');
 
   // Modals
   const [showAddPatientModal, setShowAddPatientModal] = useState(false);
@@ -116,6 +127,11 @@ export default function Home() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showDoctorSelectionModal, setShowDoctorSelectionModal] = useState(false);
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+
+  // Duplicate detection state
+  const [duplicatePatients, setDuplicatePatients] = useState<Patient[]>([]);
+  const [proceedWithDuplicate, setProceedWithDuplicate] = useState(false);
 
   // Password change form state
   const [currentPin, setCurrentPin] = useState('');
@@ -523,9 +539,55 @@ export default function Home() {
     setLoading(false);
   };
 
+  // Duplicate patient check helper
+  const checkForDuplicatePatient = async (name: string, phone: string) => {
+    const trimmedName = name.trim();
+    const trimmedPhone = phone.trim();
+
+    // Check for exact phone match
+    if (trimmedPhone) {
+      const { data: phoneMatches } = await supabase
+        .from('patients')
+        .select('*')
+        .eq('phone', trimmedPhone);
+
+      if (phoneMatches && phoneMatches.length > 0) {
+        return { hasDuplicate: true, duplicates: phoneMatches };
+      }
+    }
+
+    // Check for similar names
+    if (trimmedName) {
+      const { data: nameMatches } = await supabase
+        .from('patients')
+        .select('*')
+        .ilike('name', `%${trimmedName}%`);
+
+      if (nameMatches && nameMatches.length > 0) {
+        return { hasDuplicate: true, duplicates: nameMatches };
+      }
+    }
+
+    return { hasDuplicate: false, duplicates: [] };
+  };
+
   const handleAddPatient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
+
+    // DUPLIKASYON KONTROLÜ - Check for duplicate patients
+    if (!proceedWithDuplicate) {
+      const duplicateCheck = await checkForDuplicatePatient(
+        newPatient.name,
+        newPatient.phone
+      );
+
+      if (duplicateCheck.hasDuplicate) {
+        setDuplicatePatients(duplicateCheck.duplicates);
+        setShowDuplicateWarning(true);
+        return;
+      }
+    }
 
     // Hekim ID belirleme
     let doctorId = currentUser.id;
@@ -572,6 +634,10 @@ export default function Home() {
       fetchData();
     }
     setLoading(false);
+
+    // Reset duplicate flags
+    setProceedWithDuplicate(false);
+    setDuplicatePatients([]);
   };
 
   const handleDoctorSelectionConfirm = async () => {
@@ -652,6 +718,29 @@ export default function Home() {
       toast({ type: 'success', message: 'İşlem silindi.' });
       fetchData();
     }
+    setLoading(false);
+  };
+
+  const handleMarkAsCompleted = async (treatmentId: string) => {
+    if (!confirm('Bu tedaviyi yapıldı olarak işaretlemek istediğinize emin misiniz?')) return;
+
+    setLoading(true);
+
+    const { error } = await supabase
+      .from('treatments')
+      .update({
+        status: 'completed',
+        completed_date: new Date().toISOString()
+      })
+      .eq('id', treatmentId);
+
+    if (error) {
+      toast({ type: 'error', message: 'Güncelleme hatası: ' + error.message });
+    } else {
+      toast({ type: 'success', message: 'Tedavi tamamlandı olarak işaretlendi!' });
+      fetchData();
+    }
+
     setLoading(false);
   };
 
@@ -1100,6 +1189,33 @@ export default function Home() {
                 </div>
               )}
 
+              {/* Treatment Filter Tabs */}
+              <div className="flex gap-2 mb-4">
+                {[
+                  { key: 'all' as const, label: 'Tümü', icon: '📋' },
+                  { key: 'planned' as const, label: 'Planlanan', icon: '📅' },
+                  { key: 'completed' as const, label: 'Yapılan', icon: '✅' }
+                ].map(({ key, label, icon }) => {
+                  const count = key === 'all'
+                    ? activePatient?.treatments?.length || 0
+                    : activePatient?.treatments?.filter(t => t.status === key).length || 0;
+
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setTreatmentFilter(key)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                        treatmentFilter === key
+                          ? 'bg-teal-600 text-white shadow'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {icon} {label} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+
               <h3 className="text-lg font-semibold text-gray-700 mb-4 px-1">Tedavi Geçmişi</h3>
               {!activePatient.treatments || activePatient.treatments.length === 0 ? (
                 <div className="text-center py-10 bg-white rounded-xl border border-dashed">
@@ -1107,9 +1223,39 @@ export default function Home() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {activePatient.treatments.map((t) => (
-                    <div key={t.id} className="bg-white p-4 rounded-xl border shadow-sm hover:shadow-md transition relative group">
-                      <div className="flex justify-between items-start mb-2">
+                  {activePatient.treatments
+                    .filter(t => treatmentFilter === 'all' || t.status === treatmentFilter)
+                    .map((t) => (
+                    <div
+                      key={t.id}
+                      className={`p-4 rounded-xl border shadow-sm hover:shadow-md transition relative group ${
+                        t.status === 'planned'
+                          ? 'bg-blue-50 border-blue-200'
+                          : t.status === 'completed'
+                          ? 'bg-white'
+                          : 'bg-gray-50 border-gray-300'
+                      }`}
+                    >
+                      {/* Status Badge */}
+                      <div className="absolute top-3 right-3">
+                        {t.status === 'planned' && (
+                          <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full font-medium">
+                            📅 Planlanan
+                          </span>
+                        )}
+                        {t.status === 'completed' && (
+                          <span className="bg-teal-100 text-teal-700 text-xs px-2 py-1 rounded-full font-medium">
+                            ✅ Yapıldı
+                          </span>
+                        )}
+                        {t.status === 'cancelled' && (
+                          <span className="bg-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full font-medium">
+                            ✕ İptal
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex justify-between items-start mb-2 pr-24">
                         <div className="flex gap-3 items-center">
                           {t.tooth_no && (
                             <div className="bg-blue-50 text-blue-700 font-bold px-3 py-1 rounded-md border border-blue-100">
@@ -1127,16 +1273,38 @@ export default function Home() {
                       </div>
                       {t.notes && <p className="text-gray-600 text-sm mt-2 bg-gray-50 p-2 rounded block">{t.notes}</p>}
 
-                      {(hasPermission.addTreatment(currentUser.role) &&
+                      {t.planned_by && (
+                        <p className="text-xs text-gray-500 mt-2">
+                          Planlayan: {t.planned_by}
+                        </p>
+                      )}
+
+                      {/* Action Buttons */}
+                      <div className="absolute bottom-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition">
+                        {/* Mark as Completed Button (for planned treatments) */}
+                        {t.status === 'planned' && hasPermission.addTreatment(currentUser.role) && (
+                          <button
+                            onClick={() => handleMarkAsCompleted(t.id)}
+                            className="bg-teal-600 text-white px-3 py-1 rounded text-xs hover:bg-teal-700 font-medium"
+                            title="Yapıldı Olarak İşaretle"
+                          >
+                            ✓ Yapıldı
+                          </button>
+                        )}
+
+                        {/* Delete Button */}
+                        {(hasPermission.addTreatment(currentUser.role) &&
                         ((currentUser.role === 'admin' || currentUser.role === 'asistan') ||
                           (currentUser.role === 'doctor' && activePatient.doctor_id === currentUser.id))) && (
                           <button
                             onClick={() => handleDeleteTreatment(t.id)}
-                            className="absolute bottom-4 right-4 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"
+                            className="text-gray-300 hover:text-red-500 transition"
+                            title="Sil"
                           >
                             <Trash2 size={16} />
                           </button>
                         )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1536,6 +1704,73 @@ export default function Home() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Patient Warning Modal */}
+      {showDuplicateWarning && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-bold text-orange-600 mb-4">
+              ⚠️ Benzer Hasta Kaydı Bulundu
+            </h3>
+
+            <p className="text-gray-700 mb-4">
+              Sistemde benzer hasta(lar) mevcut:
+            </p>
+
+            <div className="space-y-2 mb-6">
+              {duplicatePatients.map(p => (
+                <div key={p.id} className="border rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition">
+                  <div className="font-semibold text-gray-800">{p.name}</div>
+                  <div className="text-sm text-gray-600">
+                    📞 {p.phone || 'Tel yok'} | 👨‍⚕️ {p.doctor_name}
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedPatientId(p.id);
+                      setShowDuplicateWarning(false);
+                      setShowAddPatientModal(false);
+                      setDuplicatePatients([]);
+                      toast({ type: 'info', message: 'Mevcut hasta seçildi' });
+                    }}
+                    className="mt-2 text-sm text-teal-600 hover:underline font-medium"
+                  >
+                    Bu hastayı seç →
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowDuplicateWarning(false);
+                  setProceedWithDuplicate(false);
+                }}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50 transition"
+              >
+                İptal
+              </button>
+              <button
+                onClick={() => {
+                  setProceedWithDuplicate(true);
+                  setShowDuplicateWarning(false);
+                  // Re-trigger form submission after a brief delay
+                  setTimeout(() => {
+                    const form = document.querySelector('form[data-patient-form]');
+                    if (form) {
+                      const event = new Event('submit', { bubbles: true, cancelable: true });
+                      form.dispatchEvent(event);
+                    }
+                  }, 100);
+                }}
+                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium transition"
+              >
+                Yine de Yeni Hasta Ekle
+              </button>
+            </div>
           </div>
         </div>
       )}
