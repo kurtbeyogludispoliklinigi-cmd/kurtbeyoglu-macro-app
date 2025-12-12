@@ -191,7 +191,7 @@ export default function Home() {
       let treatmentQuery = supabase.from('treatments').select('*').order('created_at', { ascending: false });
 
       // If NOT admin, filter strictly
-      if (activeUser.role !== 'admin') {
+      if (activeUser.role === 'doctor') {
         patientQuery = patientQuery.eq('doctor_id', activeUser.id);
         // For treatments, we need to filter by patient IDs effectively or if treatments table has doctor_id (it doesn't seem to, it has added_by name).
         // Best approach: Fetch patients first, then fetch treatments for those patients.
@@ -1204,11 +1204,10 @@ export default function Home() {
                     <button
                       key={key}
                       onClick={() => setTreatmentFilter(key)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                        treatmentFilter === key
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition ${treatmentFilter === key
                           ? 'bg-teal-600 text-white shadow'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
+                        }`}
                     >
                       {icon} {label} ({count})
                     </button>
@@ -1226,87 +1225,86 @@ export default function Home() {
                   {activePatient.treatments
                     .filter(t => treatmentFilter === 'all' || t.status === treatmentFilter)
                     .map((t) => (
-                    <div
-                      key={t.id}
-                      className={`p-4 rounded-xl border shadow-sm hover:shadow-md transition relative group ${
-                        t.status === 'planned'
-                          ? 'bg-blue-50 border-blue-200'
-                          : t.status === 'completed'
-                          ? 'bg-white'
-                          : 'bg-gray-50 border-gray-300'
-                      }`}
-                    >
-                      {/* Status Badge */}
-                      <div className="absolute top-3 right-3">
-                        {t.status === 'planned' && (
-                          <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full font-medium">
-                            📅 Planlanan
-                          </span>
-                        )}
-                        {t.status === 'completed' && (
-                          <span className="bg-teal-100 text-teal-700 text-xs px-2 py-1 rounded-full font-medium">
-                            ✅ Yapıldı
-                          </span>
-                        )}
-                        {t.status === 'cancelled' && (
-                          <span className="bg-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full font-medium">
-                            ✕ İptal
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex justify-between items-start mb-2 pr-24">
-                        <div className="flex gap-3 items-center">
-                          {t.tooth_no && (
-                            <div className="bg-blue-50 text-blue-700 font-bold px-3 py-1 rounded-md border border-blue-100">
-                              #{t.tooth_no}
-                            </div>
+                      <div
+                        key={t.id}
+                        className={`p-4 rounded-xl border shadow-sm hover:shadow-md transition relative group ${t.status === 'planned'
+                            ? 'bg-blue-50 border-blue-200'
+                            : t.status === 'completed'
+                              ? 'bg-white'
+                              : 'bg-gray-50 border-gray-300'
+                          }`}
+                      >
+                        {/* Status Badge */}
+                        <div className="absolute top-3 right-3">
+                          {t.status === 'planned' && (
+                            <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full font-medium">
+                              📅 Planlanan
+                            </span>
                           )}
-                          <h4 className="font-bold text-gray-800 text-lg">{t.procedure}</h4>
+                          {t.status === 'completed' && (
+                            <span className="bg-teal-100 text-teal-700 text-xs px-2 py-1 rounded-full font-medium">
+                              ✅ Yapıldı
+                            </span>
+                          )}
+                          {t.status === 'cancelled' && (
+                            <span className="bg-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full font-medium">
+                              ✕ İptal
+                            </span>
+                          )}
                         </div>
-                        <div className="text-right">
-                          <div className="text-xs text-gray-400 flex items-center gap-1 justify-end">
-                            <Clock size={12} /> {new Date(t.created_at).toLocaleDateString()}
+
+                        <div className="flex justify-between items-start mb-2 pr-24">
+                          <div className="flex gap-3 items-center">
+                            {t.tooth_no && (
+                              <div className="bg-blue-50 text-blue-700 font-bold px-3 py-1 rounded-md border border-blue-100">
+                                #{t.tooth_no}
+                              </div>
+                            )}
+                            <h4 className="font-bold text-gray-800 text-lg">{t.procedure}</h4>
                           </div>
-                          {t.cost && <div className="text-teal-600 font-bold mt-1">{t.cost} ₺</div>}
+                          <div className="text-right">
+                            <div className="text-xs text-gray-400 flex items-center gap-1 justify-end">
+                              <Clock size={12} /> {new Date(t.created_at).toLocaleDateString()}
+                            </div>
+                            {t.cost && <div className="text-teal-600 font-bold mt-1">{t.cost} ₺</div>}
+                          </div>
+                        </div>
+                        {t.notes && <p className="text-gray-600 text-sm mt-2 bg-gray-50 p-2 rounded block">{t.notes}</p>}
+
+                        {t.planned_by && (
+                          <p className="text-xs text-gray-500 mt-2">
+                            Planlayan: {t.planned_by}
+                          </p>
+                        )}
+
+                        {/* Action Buttons */}
+                        <div className="absolute bottom-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition">
+                          {/* Mark as Completed Button (for planned treatments) */}
+                          {t.status === 'planned' && hasPermission.addTreatment(currentUser.role) && (
+                            <button
+                              onClick={() => handleMarkAsCompleted(t.id)}
+                              className="bg-teal-600 text-white px-3 py-1 rounded text-xs hover:bg-teal-700 font-medium"
+                              title="Yapıldı Olarak İşaretle"
+                            >
+                              ✓ Yapıldı
+                            </button>
+                          )}
+
+                          {/* Delete Button */}
+                          {(hasPermission.addTreatment(currentUser.role) &&
+                            ((currentUser.role === 'admin' || currentUser.role === 'asistan') ||
+                              (currentUser.role === 'doctor' && activePatient.doctor_id === currentUser.id))) && (
+                              <button
+                                onClick={() => handleDeleteTreatment(t.id)}
+                                className="text-gray-300 hover:text-red-500 transition"
+                                title="Sil"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            )}
                         </div>
                       </div>
-                      {t.notes && <p className="text-gray-600 text-sm mt-2 bg-gray-50 p-2 rounded block">{t.notes}</p>}
-
-                      {t.planned_by && (
-                        <p className="text-xs text-gray-500 mt-2">
-                          Planlayan: {t.planned_by}
-                        </p>
-                      )}
-
-                      {/* Action Buttons */}
-                      <div className="absolute bottom-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition">
-                        {/* Mark as Completed Button (for planned treatments) */}
-                        {t.status === 'planned' && hasPermission.addTreatment(currentUser.role) && (
-                          <button
-                            onClick={() => handleMarkAsCompleted(t.id)}
-                            className="bg-teal-600 text-white px-3 py-1 rounded text-xs hover:bg-teal-700 font-medium"
-                            title="Yapıldı Olarak İşaretle"
-                          >
-                            ✓ Yapıldı
-                          </button>
-                        )}
-
-                        {/* Delete Button */}
-                        {(hasPermission.addTreatment(currentUser.role) &&
-                        ((currentUser.role === 'admin' || currentUser.role === 'asistan') ||
-                          (currentUser.role === 'doctor' && activePatient.doctor_id === currentUser.id))) && (
-                          <button
-                            onClick={() => handleDeleteTreatment(t.id)}
-                            className="text-gray-300 hover:text-red-500 transition"
-                            title="Sil"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               )}
             </div>
