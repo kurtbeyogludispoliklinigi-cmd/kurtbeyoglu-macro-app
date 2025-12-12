@@ -119,6 +119,7 @@ export default function Home() {
   // Selection
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'yesterday' | 'week'>('all');
   const [treatmentFilter, setTreatmentFilter] = useState<'all' | 'planned' | 'completed'>('all');
 
   // Modals
@@ -173,6 +174,13 @@ export default function Home() {
   const [queueData, setQueueData] = useState<QueueData | null>(null);
   const [doctorSelectionMethod, setDoctorSelectionMethod] = useState<'manual' | 'queue' | null>(null);
 
+  // Track recent queue assignments for consecutive detection
+  const [recentQueueAssignments, setRecentQueueAssignments] = useState<{
+    doctorId: string;
+    doctorName: string;
+    timestamp: number;
+  }[]>([]);
+
   // --- FETCHING ---
   // --- FETCHING ---
   const fetchData = async (overrideUser?: Doctor) => {
@@ -190,12 +198,13 @@ export default function Home() {
       let patientQuery = supabase.from('patients').select('*').order('updated_at', { ascending: false });
       let treatmentQuery = supabase.from('treatments').select('*').order('created_at', { ascending: false });
 
-      // If NOT admin, filter strictly
+      // Doctors see only their assigned patients
+      // Admin, banko, asistan see all patients
       if (activeUser.role === 'doctor') {
         patientQuery = patientQuery.eq('doctor_id', activeUser.id);
         // For treatments, we need to filter by patient IDs effectively or if treatments table has doctor_id (it doesn't seem to, it has added_by name).
         // Best approach: Fetch patients first, then fetch treatments for those patients.
-        // OR: Modify treatments schema to include doctor_id. 
+        // OR: Modify treatments schema to include doctor_id.
         // Current Schema: treatments has patient_id.
         // We will fetch treatments after patients.
       }
@@ -266,15 +275,47 @@ export default function Home() {
 
   const filteredPatients = useMemo(() => {
     let list = patientsWithTreatments;
-    // Only doctors (hekim) see filtered patients, others (admin, banko, asistan) see all
+
+    // Role-based filtering
     if (currentUser && !hasPermission.viewAllPatients(currentUser.role)) {
       list = list.filter((p: Patient) => p.doctor_id === currentUser.id);
     }
-    return list.filter((p: Patient) =>
+
+    // Search filtering
+    list = list.filter((p: Patient) =>
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (p.phone && p.phone.includes(searchTerm))
     );
-  }, [patientsWithTreatments, searchTerm, currentUser]);
+
+    // Date filtering (only for users who can see all patients)
+    if (dateFilter !== 'all' && currentUser && hasPermission.viewAllPatients(currentUser.role)) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      list = list.filter((p: Patient) => {
+        if (!p.assignment_date) return false;
+        const assignDate = new Date(p.assignment_date);
+        assignDate.setHours(0, 0, 0, 0);
+
+        switch (dateFilter) {
+          case 'today':
+            return assignDate.getTime() === today.getTime();
+          case 'yesterday':
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            return assignDate.getTime() === yesterday.getTime();
+          case 'week':
+            const weekAgo = new Date(today);
+            weekAgo.setDate(weekAgo.getDate() - 7);
+            return assignDate >= weekAgo;
+          default:
+            return true;
+        }
+      });
+    }
+
+    return list;
+  }, [patientsWithTreatments, searchTerm, currentUser, dateFilter]);
 
   const activePatient = patientsWithTreatments.find((p: Patient) => p.id === selectedPatientId);
 
@@ -376,6 +417,13 @@ export default function Home() {
       initializeQueue();
     }
   }, [currentUser, users]);
+
+  // Clear assignment tracking when switching away from patients tab
+  useEffect(() => {
+    if (activeTab !== 'patients') {
+      setRecentQueueAssignments([]);
+    }
+  }, [activeTab]);
 
   // Fetch password change history when admin modal opens
   useEffect(() => {
@@ -609,6 +657,51 @@ export default function Home() {
         assignmentType = 'queue';
       } else {
         assignmentType = 'preference';
+      }
+    }
+
+    // Check for consecutive queue assignments
+    if (currentUser.role === 'banko' || currentUser.role === 'asistan') {
+      if (assignmentType === 'queue' && doctorSelectionMethod === 'queue') {
+        // Check last assignments
+        const recentSameDoctor = recentQueueAssignments.filter(
+          (assignment) =>
+            assignment.doctorId === doctorId &&
+            Date.now() - assignment.timestamp < 3600000 // Within last hour
+        );
+
+        if (recentSameDoctor.length >= 1) {
+          // Get current distribution for context
+          const today = new Date().toISOString().split('T')[0];
+          const todaysPatients = patients.filter(p => p.assignment_date === today);
+          const doctorStats: Record<string, number> = {};
+
+          todaysPatients.forEach(p => {
+            if (p.assignment_type === 'queue') {
+              doctorStats[p.doctor_id] = (doctorStats[p.doctor_id] || 0) + 1;
+            }
+          });
+
+          const currentDoctorCount = (doctorStats[doctorId] || 0) + recentSameDoctor.length;
+          const otherCounts = Object.values(doctorStats).filter((_, idx) =>
+            Object.keys(doctorStats)[idx] !== doctorId
+          );
+          const avgOthers = otherCounts.length > 0
+            ? Math.round(otherCounts.reduce((a, b) => a + b, 0) / otherCounts.length)
+            : 0;
+
+          toast({
+            type: 'warning',
+            message: `⚠️ Dikkat: ${doctorName} hekime arka arkaya ${recentSameDoctor.length + 1}. hasta ekleniyor! (Bugün: ${currentDoctorCount + 1}, Diğer hekimler ort: ${avgOthers})`,
+            duration: 5000
+          });
+        }
+
+        // Track this assignment
+        setRecentQueueAssignments(prev => [
+          ...prev.slice(-4), // Keep last 5 assignments
+          { doctorId, doctorName, timestamp: Date.now() }
+        ]);
       }
     }
 
@@ -1026,6 +1119,57 @@ export default function Home() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+
+            {/* Date Filter - Only for roles that can see all patients */}
+            {hasPermission.viewAllPatients(currentUser.role) && (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                <button
+                  onClick={() => setDateFilter('all')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition",
+                    dateFilter === 'all'
+                      ? "bg-teal-600 text-white shadow"
+                      : "bg-white dark:bg-slate-700 text-gray-600 dark:text-gray-300 border"
+                  )}
+                >
+                  Tümü
+                </button>
+                <button
+                  onClick={() => setDateFilter('today')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition",
+                    dateFilter === 'today'
+                      ? "bg-teal-600 text-white shadow"
+                      : "bg-white dark:bg-slate-700 text-gray-600 dark:text-gray-300 border"
+                  )}
+                >
+                  Bugün
+                </button>
+                <button
+                  onClick={() => setDateFilter('yesterday')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition",
+                    dateFilter === 'yesterday'
+                      ? "bg-teal-600 text-white shadow"
+                      : "bg-white dark:bg-slate-700 text-gray-600 dark:text-gray-300 border"
+                  )}
+                >
+                  Dün
+                </button>
+                <button
+                  onClick={() => setDateFilter('week')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition",
+                    dateFilter === 'week'
+                      ? "bg-teal-600 text-white shadow"
+                      : "bg-white dark:bg-slate-700 text-gray-600 dark:text-gray-300 border"
+                  )}
+                >
+                  Son 7 Gün
+                </button>
+              </div>
+            )}
+
             <button
               onClick={handleNewPatientClick}
               className="w-full bg-teal-600 text-white py-2 rounded-lg font-medium hover:bg-teal-700 transition flex justify-center items-center gap-2 shadow-sm"
@@ -1066,9 +1210,26 @@ export default function Home() {
                             <Phone size={12} /> {p.phone || 'Tel yok'}
                           </p>
                           {hasPermission.viewAllPatients(currentUser.role) && (
-                            <span className="text-[10px] bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded mt-1 inline-block">
-                              Hekim: {p.doctor_name || 'Bilinmiyor'}
-                            </span>
+                            <div className="flex flex-wrap gap-1.5 mt-1.5">
+                              <span className="text-[10px] bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded">
+                                Hekim: {p.doctor_name || 'Bilinmiyor'}
+                              </span>
+                              {p.assignment_type && (
+                                <span className={cn(
+                                  "text-[10px] px-1.5 py-0.5 rounded font-medium",
+                                  p.assignment_type === 'queue'
+                                    ? "bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300"
+                                    : "bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300"
+                                )}>
+                                  {p.assignment_type === 'queue' ? '🔄 Sıralı' : '⭐ Tercihli'}
+                                </span>
+                              )}
+                              {p.assignment_date && (
+                                <span className="text-[10px] bg-gray-100 dark:bg-slate-600 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded">
+                                  📅 {new Date(p.assignment_date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
+                                </span>
+                              )}
+                            </div>
                           )}
                         </div>
                         <div className="text-right">
@@ -1204,10 +1365,11 @@ export default function Home() {
                     <button
                       key={key}
                       onClick={() => setTreatmentFilter(key)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition ${treatmentFilter === key
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                        treatmentFilter === key
                           ? 'bg-teal-600 text-white shadow'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
+                      }`}
                     >
                       {icon} {label} ({count})
                     </button>
@@ -1225,86 +1387,87 @@ export default function Home() {
                   {activePatient.treatments
                     .filter(t => treatmentFilter === 'all' || t.status === treatmentFilter)
                     .map((t) => (
-                      <div
-                        key={t.id}
-                        className={`p-4 rounded-xl border shadow-sm hover:shadow-md transition relative group ${t.status === 'planned'
-                            ? 'bg-blue-50 border-blue-200'
-                            : t.status === 'completed'
-                              ? 'bg-white'
-                              : 'bg-gray-50 border-gray-300'
-                          }`}
-                      >
-                        {/* Status Badge */}
-                        <div className="absolute top-3 right-3">
-                          {t.status === 'planned' && (
-                            <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full font-medium">
-                              📅 Planlanan
-                            </span>
-                          )}
-                          {t.status === 'completed' && (
-                            <span className="bg-teal-100 text-teal-700 text-xs px-2 py-1 rounded-full font-medium">
-                              ✅ Yapıldı
-                            </span>
-                          )}
-                          {t.status === 'cancelled' && (
-                            <span className="bg-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full font-medium">
-                              ✕ İptal
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex justify-between items-start mb-2 pr-24">
-                          <div className="flex gap-3 items-center">
-                            {t.tooth_no && (
-                              <div className="bg-blue-50 text-blue-700 font-bold px-3 py-1 rounded-md border border-blue-100">
-                                #{t.tooth_no}
-                              </div>
-                            )}
-                            <h4 className="font-bold text-gray-800 text-lg">{t.procedure}</h4>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-xs text-gray-400 flex items-center gap-1 justify-end">
-                              <Clock size={12} /> {new Date(t.created_at).toLocaleDateString()}
-                            </div>
-                            {t.cost && <div className="text-teal-600 font-bold mt-1">{t.cost} ₺</div>}
-                          </div>
-                        </div>
-                        {t.notes && <p className="text-gray-600 text-sm mt-2 bg-gray-50 p-2 rounded block">{t.notes}</p>}
-
-                        {t.planned_by && (
-                          <p className="text-xs text-gray-500 mt-2">
-                            Planlayan: {t.planned_by}
-                          </p>
+                    <div
+                      key={t.id}
+                      className={`p-4 rounded-xl border shadow-sm hover:shadow-md transition relative group ${
+                        t.status === 'planned'
+                          ? 'bg-blue-50 border-blue-200'
+                          : t.status === 'completed'
+                          ? 'bg-white'
+                          : 'bg-gray-50 border-gray-300'
+                      }`}
+                    >
+                      {/* Status Badge */}
+                      <div className="absolute top-3 right-3">
+                        {t.status === 'planned' && (
+                          <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full font-medium">
+                            📅 Planlanan
+                          </span>
                         )}
+                        {t.status === 'completed' && (
+                          <span className="bg-teal-100 text-teal-700 text-xs px-2 py-1 rounded-full font-medium">
+                            ✅ Yapıldı
+                          </span>
+                        )}
+                        {t.status === 'cancelled' && (
+                          <span className="bg-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full font-medium">
+                            ✕ İptal
+                          </span>
+                        )}
+                      </div>
 
-                        {/* Action Buttons */}
-                        <div className="absolute bottom-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition">
-                          {/* Mark as Completed Button (for planned treatments) */}
-                          {t.status === 'planned' && hasPermission.addTreatment(currentUser.role) && (
-                            <button
-                              onClick={() => handleMarkAsCompleted(t.id)}
-                              className="bg-teal-600 text-white px-3 py-1 rounded text-xs hover:bg-teal-700 font-medium"
-                              title="Yapıldı Olarak İşaretle"
-                            >
-                              ✓ Yapıldı
-                            </button>
+                      <div className="flex justify-between items-start mb-2 pr-24">
+                        <div className="flex gap-3 items-center">
+                          {t.tooth_no && (
+                            <div className="bg-blue-50 text-blue-700 font-bold px-3 py-1 rounded-md border border-blue-100">
+                              #{t.tooth_no}
+                            </div>
                           )}
-
-                          {/* Delete Button */}
-                          {(hasPermission.addTreatment(currentUser.role) &&
-                            ((currentUser.role === 'admin' || currentUser.role === 'asistan') ||
-                              (currentUser.role === 'doctor' && activePatient.doctor_id === currentUser.id))) && (
-                              <button
-                                onClick={() => handleDeleteTreatment(t.id)}
-                                className="text-gray-300 hover:text-red-500 transition"
-                                title="Sil"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            )}
+                          <h4 className="font-bold text-gray-800 text-lg">{t.procedure}</h4>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs text-gray-400 flex items-center gap-1 justify-end">
+                            <Clock size={12} /> {new Date(t.created_at).toLocaleDateString()}
+                          </div>
+                          {t.cost && <div className="text-teal-600 font-bold mt-1">{t.cost} ₺</div>}
                         </div>
                       </div>
-                    ))}
+                      {t.notes && <p className="text-gray-600 text-sm mt-2 bg-gray-50 p-2 rounded block">{t.notes}</p>}
+
+                      {t.planned_by && (
+                        <p className="text-xs text-gray-500 mt-2">
+                          Planlayan: {t.planned_by}
+                        </p>
+                      )}
+
+                      {/* Action Buttons */}
+                      <div className="absolute bottom-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition">
+                        {/* Mark as Completed Button (for planned treatments) */}
+                        {t.status === 'planned' && hasPermission.addTreatment(currentUser.role) && (
+                          <button
+                            onClick={() => handleMarkAsCompleted(t.id)}
+                            className="bg-teal-600 text-white px-3 py-1 rounded text-xs hover:bg-teal-700 font-medium"
+                            title="Yapıldı Olarak İşaretle"
+                          >
+                            ✓ Yapıldı
+                          </button>
+                        )}
+
+                        {/* Delete Button */}
+                        {(hasPermission.addTreatment(currentUser.role) &&
+                        ((currentUser.role === 'admin' || currentUser.role === 'asistan') ||
+                          (currentUser.role === 'doctor' && activePatient.doctor_id === currentUser.id))) && (
+                          <button
+                            onClick={() => handleDeleteTreatment(t.id)}
+                            className="text-gray-300 hover:text-red-500 transition"
+                            title="Sil"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
