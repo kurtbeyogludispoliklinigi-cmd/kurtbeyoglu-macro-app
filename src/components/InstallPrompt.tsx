@@ -138,7 +138,7 @@ export function InstallPrompt() {
                         {!isSafari && (
                             <button
                                 onClick={handleInstall}
-                                className="flex-1 py-2 px-3 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition flex items-center justify-center gap-2"
+                                className="flex-1 py-2 px-3 text-sm bg-[#0e7490] text-white rounded-lg hover:bg-[#155e75] transition flex items-center justify-center gap-2"
                             >
                                 <Download size={14} />
                                 Yükle

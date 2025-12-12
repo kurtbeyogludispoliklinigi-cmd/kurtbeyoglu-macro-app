@@ -109,7 +109,7 @@ export function AppointmentModal({
                     >
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
-                                <Calendar size={20} className="text-teal-500" />
+                                <Calendar size={20} className="text-[#0e7490]" />
                                 {existingAppointment ? 'Randevu Düzenle' : 'Yeni Randevu'}
                             </h3>
                             <button
@@ -136,7 +136,7 @@ export function AppointmentModal({
                                     value={patientId}
                                     onChange={(e) => setPatientId(e.target.value)}
                                     required
-                                    className="w-full p-3 border rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:ring-2 focus:ring-teal-500 outline-none"
+                                    className="w-full p-3 border rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:ring-2 focus:ring-[#0e7490] outline-none"
                                 >
                                     <option value="">Hasta Seçin...</option>
                                     {patients.map((p) => (
@@ -225,7 +225,7 @@ export function AppointmentModal({
                                 <button
                                     type="submit"
                                     disabled={loading}
-                                    className="flex-1 py-3 px-4 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition font-bold disabled:opacity-50"
+                                    className="flex-1 py-3 px-4 bg-[#0e7490] text-white rounded-lg hover:bg-[#155e75] transition font-bold disabled:opacity-50"
                                 >
                                     {loading ? '...' : existingAppointment ? 'Güncelle' : 'Kaydet'}
                                 </button>

@@ -81,12 +81,12 @@ export function AppointmentList({
             <div className="p-4 bg-white dark:bg-slate-800 border-b dark:border-slate-700">
                 <div className="flex items-center justify-between mb-3">
                     <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
-                        <Calendar size={20} className="text-teal-500" />
+                        <Calendar size={20} className="text-[#0e7490]" />
                         Randevular
                     </h2>
                     <button
                         onClick={onAddNew}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition text-sm font-medium"
+                        className="flex items-center gap-1 px-3 py-1.5 bg-[#0e7490] text-white rounded-lg hover:bg-[#155e75] transition text-sm font-medium"
                     >
                         <Plus size={16} /> Yeni
                     </button>
@@ -105,8 +105,8 @@ export function AppointmentList({
                         <button
                             onClick={goToToday}
                             className={`text-sm font-medium ${isToday(selectedDate)
-                                    ? 'text-teal-600 dark:text-teal-400'
-                                    : 'text-gray-800 dark:text-gray-200 hover:text-teal-600'
+                                ? 'text-[#0e7490] dark:text-teal-400'
+                                : 'text-gray-800 dark:text-gray-200 hover:text-[#0e7490]'
                                 }`}
                         >
                             {isToday(selectedDate) ? 'Bugün' : formatDate(selectedDate)}
@@ -134,7 +134,7 @@ export function AppointmentList({
                         <p>Bu gün için randevu yok.</p>
                         <button
                             onClick={onAddNew}
-                            className="mt-3 text-teal-600 hover:text-teal-700 font-medium text-sm"
+                            className="mt-3 text-[#0e7490] hover:text-[#155e75] font-medium text-sm"
                         >
                             + Randevu Ekle
                         </button>
@@ -163,7 +163,7 @@ export function AppointmentList({
                                         <div className="flex items-center gap-3">
                                             {/* Time */}
                                             <div className="text-center min-w-[60px]">
-                                                <div className="text-lg font-bold text-teal-600 dark:text-teal-400">
+                                                <div className="text-lg font-bold text-[#0e7490] dark:text-teal-400">
                                                     {formatTime(apt.appointment_date)}
                                                 </div>
                                                 <div className="text-xs text-gray-400">{apt.duration_minutes} dk</div>
@@ -216,8 +216,8 @@ export function AppointmentList({
                                                                     onStatusChange(apt.id, s);
                                                                 }}
                                                                 className={`px-2 py-1 text-xs rounded-full transition ${apt.status === s
-                                                                        ? statusConfig[s].color + ' ring-2 ring-offset-1 ring-current'
-                                                                        : 'bg-gray-100 dark:bg-slate-600 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
+                                                                    ? statusConfig[s].color + ' ring-2 ring-offset-1 ring-current'
+                                                                    : 'bg-gray-100 dark:bg-slate-600 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
                                                                     }`}
                                                             >
                                                                 {statusConfig[s].label}

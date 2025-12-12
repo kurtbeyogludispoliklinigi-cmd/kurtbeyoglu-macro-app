@@ -1,56 +1,84 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc; /* Slate-50 - Crisp, premium light grey */
+  --foreground: #0f172a; /* Slate-900 - Deep crisp black */
   --card-bg: #ffffff;
-  --card-border: #e5e7eb;
-  --muted: #f3f4f6;
-  --muted-foreground: #6b7280;
-  --primary: #0d9488;
+  --card-border: #e2e8f0; /* Slate-200 */
+  --muted: #f1f5f9; /* Slate-100 */
+  --muted-foreground: #64748b; /* Slate-500 */
+  
+  /* Primary: Deep Turquoise / Petrol Blue */
+  --primary: #0e7490; /* Cyan-700 */
   --primary-foreground: #ffffff;
-  --sidebar-bg: #ffffff;
-  --header-bg: #0d9488;
-  --input-bg: #f9fafb;
-  --input-border: #d1d5db;
+  
+  /* Secondary: Gold */
+  --secondary: #cca43b;
+  --secondary-foreground: #ffffff;
+  
+  /* Layout */
+  --sidebar-bg: #0f172a; /* Slate-900 - Prestige Dark */
+  --sidebar-fg: #f8fafc;
+  --header-bg: #ffffff;
+  --header-fg: #0f172a;
+  
+  --input-bg: #ffffff;
+  --input-border: #cbd5e1;
 }
 
 .dark {
-  --background: #0f172a;
-  --foreground: #f1f5f9;
-  --card-bg: #1e293b;
-  --card-border: #334155;
+  --background: #020617; /* Slate-950 */
+  --foreground: #f8fafc;
+  --card-bg: #0f172a; /* Slate-900 */
+  --card-border: #1e293b; /* Slate-800 */
   --muted: #1e293b;
   --muted-foreground: #94a3b8;
-  --primary: #14b8a6;
-  --primary-foreground: #ffffff;
-  --sidebar-bg: #1e293b;
-  --header-bg: #0f766e;
+  
+  /* Primary: Lighter Turquoise for dark mode */
+  --primary: #06b6d4; /* Cyan-500 */
+  --primary-foreground: #0f172a;
+  
+  /* Secondary: Gold */
+  --secondary: #fbbf24; /* Amber-400 */
+  --secondary-foreground: #0f172a;
+
+  /* Layout */
+  --sidebar-bg: #020617; /* Black/Darkest Slate */
+  --sidebar-fg: #f8fafc;
+  --header-bg: #0f172a;
+  --header-fg: #f8fafc;
+  
   --input-bg: #0f172a;
-  --input-border: #475569;
+  --input-border: #334155;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-sidebar: var(--sidebar-bg);
+  --color-sidebar-fg: var(--sidebar-fg);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
-    --background: #0f172a;
-    --foreground: #f1f5f9;
-    --card-bg: #1e293b;
-    --card-border: #334155;
+    --background: #020617;
+    --foreground: #f8fafc;
+    --card-bg: #0f172a;
+    --card-border: #1e293b;
     --muted: #1e293b;
     --muted-foreground: #94a3b8;
-    --primary: #14b8a6;
-    --primary-foreground: #ffffff;
-    --sidebar-bg: #1e293b;
-    --header-bg: #0f766e;
+    --primary: #06b6d4;
+    --primary-foreground: #0f172a;
+    --secondary: #fbbf24;
+    --secondary-foreground: #0f172a;
+    --sidebar-bg: #020617;
+    --sidebar-fg: #f8fafc;
+    --header-bg: #0f172a;
+    --header-fg: #f8fafc;
     --input-bg: #0f172a;
-    --input-border: #475569;
+    --input-border: #334155;
   }
 }
 

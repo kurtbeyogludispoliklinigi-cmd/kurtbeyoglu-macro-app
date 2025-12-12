@@ -888,46 +888,55 @@ export default function Home() {
   // 2. Login Screen
   if (!currentUser) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm relative">
-          {loading && <div className="absolute top-4 right-4"><div className="w-5 h-5 border-2 border-teal-600 border-t-transparent rounded-full animate-spin"></div></div>}
-          <div className="text-center mb-8">
-            <div className="bg-teal-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Cloud size={32} className="text-teal-600" />
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4 relative overflow-hidden">
+        {/* Decorative Background Elements */}
+        <div className="absolute top-0 left-0 w-full h-1/2 bg-[#0f172a]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-[#0e7490] rounded-full blur-3xl opacity-10 pointer-events-none" />
+
+        <div className="bg-white p-8 md:p-12 rounded-3xl shadow-2xl w-full max-w-md relative z-10 border border-slate-100">
+          {loading && <div className="absolute top-6 right-6"><div className="w-5 h-5 border-2 border-[#0e7490] border-t-transparent rounded-full animate-spin"></div></div>}
+          <div className="text-center mb-10">
+            <div className="w-24 h-24 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg border border-slate-100 p-2">
+              <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-800">Özel Kurtbeyoğlu Ağız ve Diş Sağlığı Polikliniği</h1>
-            <p className="text-gray-500 text-sm">Hasta Takip ve Randevu Sistemi</p>
+            <h1 className="text-2xl font-bold text-slate-800 leading-tight mb-2">Özel Kurtbeyoğlu<br />Ağız ve Diş Sağlığı Polikliniği</h1>
+            <p className="text-slate-500 text-sm font-medium tracking-wide uppercase">Hasta Takip ve Randevu Sistemi</p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Kullanıcı Seçin</label>
-              <select
-                className="w-full p-3 border rounded-lg bg-white focus:ring-2 focus:ring-teal-500 outline-none text-gray-900 font-medium"
-                value={selectedLoginUser}
-                onChange={(e) => setSelectedLoginUser(e.target.value)}
-                required
-                disabled={loading}
-              >
-                <option value="" className="text-gray-400">Seçiniz...</option>
-                {users.map(u => (
-                  <option
-                    key={u.id}
-                    value={u.id}
-                    className="text-gray-900 font-normal py-2"
-                  >
-                    {u.name}
-                  </option>
-                ))}
-              </select>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Kullanıcı Seçin</label>
+              <div className="relative">
+                <select
+                  className="w-full p-4 pl-4 pr-10 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-[#0e7490]/20 focus:border-[#0e7490] outline-none text-slate-900 font-medium appearance-none transition-all shadow-sm"
+                  value={selectedLoginUser}
+                  onChange={(e) => setSelectedLoginUser(e.target.value)}
+                  required
+                  disabled={loading}
+                >
+                  <option value="" className="text-gray-400">Seçiniz...</option>
+                  {users.map(u => (
+                    <option
+                      key={u.id}
+                      value={u.id}
+                      className="text-gray-900 font-medium py-2"
+                    >
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-slate-500">
+                  <User size={18} />
+                </div>
+              </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Giriş Şifresi (PIN)</label>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Giriş Şifresi (PIN)</label>
               <input
                 type="password"
-                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-center tracking-widest text-lg"
-                placeholder="****"
+                className="w-full p-4 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-[#0e7490]/20 focus:border-[#0e7490] outline-none text-center tracking-[0.5em] text-xl font-bold text-slate-800 shadow-sm transition-all placeholder:tracking-normal placeholder:font-normal"
+                placeholder="PIN"
                 value={loginPin}
                 onChange={(e) => setLoginPin(e.target.value)}
                 maxLength={6}
@@ -935,10 +944,14 @@ export default function Home() {
               />
             </div>
 
-            <button disabled={loading} type="submit" className="w-full bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 transition shadow-lg disabled:opacity-50">
+            <button disabled={loading} type="submit" className="w-full bg-[#0e7490] text-white py-4 rounded-xl font-bold hover:bg-[#155e75] transition-all shadow-lg hover:shadow-[#0e7490]/25 disabled:opacity-70 disabled:cursor-not-allowed mt-4 active:scale-[0.98]">
               {loading ? 'Yükleniyor...' : 'Giriş Yap'}
             </button>
           </form>
+
+          <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+            <p className="text-xs text-slate-400">Güvenli ve Modern Diş Hekimliği</p>
+          </div>
         </div>
       </div>
     );
@@ -987,7 +1000,7 @@ export default function Home() {
 
       {/* SIDEBAR */}
       <div className={cn(
-        "bg-white border-r flex flex-col shadow-lg relative h-full transition-transform duration-300",
+        "bg-[#0f172a] border-r border-slate-800 flex flex-col shadow-2xl relative h-full transition-transform duration-300",
         "md:w-1/3 lg:w-1/4 md:relative md:translate-x-0",
         "fixed top-0 left-0 bottom-0 w-[85%] max-w-sm z-40",
         showMobileSidebar ? "translate-x-0" : "-translate-x-full md:translate-x-0"
@@ -995,30 +1008,25 @@ export default function Home() {
         {loading && <div className="absolute top-0 left-0 w-full h-1 bg-teal-100"><div className="h-full bg-teal-500 animate-pulse w-1/2"></div></div>}
 
         {/* Header - Desktop only */}
-        <div className={cn("hidden md:flex p-4 text-white justify-between items-center shadow-md",
-          currentUser.role === 'admin' ? 'bg-indigo-600' :
-            currentUser.role === 'doctor' ? 'bg-teal-600' :
-              currentUser.role === 'banko' ? 'bg-amber-600' :
-                'bg-purple-600'
-        )}>
+        <div className="hidden md:flex p-6 text-white justify-between items-center shadow-sm bg-[#0f172a]">
           <div>
-            <h1 className="font-bold text-lg flex items-center gap-2">
-              <img src="/logo.png" alt="Logo" className="w-8 h-8 rounded-lg bg-white p-1 object-contain" />
+            <h1 className="font-bold text-lg flex items-center gap-3">
+              <img src="/logo.png" alt="Logo" className="w-10 h-10 rounded-lg bg-white p-1 object-contain" />
               <div className="flex flex-col">
-                <span>{currentUser.name}</span>
-                <span className="text-[10px] font-normal opacity-90">Özel Kurtbeyoğlu Polikliniği</span>
+                <span className="text-sm font-semibold text-slate-100">{currentUser.name}</span>
+                <span className="text-[10px] font-medium text-[#cca43b] uppercase tracking-wide">Özel Kurtbeyoğlu Polikliniği</span>
               </div>
             </h1>
           </div>
-          <div className="flex gap-1">
+          <div className="flex gap-2">
             <ThemeToggle />
-            <button onClick={() => fetchData()} className="p-2 hover:bg-white/20 rounded-full transition" title="Yenile">
+            <button onClick={() => fetchData()} className="p-2 hover:bg-white/10 rounded-full transition text-slate-400 hover:text-white" title="Yenile">
               <RefreshCcw size={18} />
             </button>
-            <button onClick={() => setShowChangePasswordModal(true)} className="p-2 hover:bg-white/20 rounded-full transition" title="Şifremi Değiştir">
+            <button onClick={() => setShowChangePasswordModal(true)} className="p-2 hover:bg-white/10 rounded-full transition text-slate-400 hover:text-white" title="Şifremi Değiştir">
               <Lock size={18} />
             </button>
-            <button onClick={() => setCurrentUser(null)} className="p-2 hover:bg-white/20 rounded-full transition" title="Çıkış Yap">
+            <button onClick={() => setCurrentUser(null)} className="p-2 hover:bg-white/10 rounded-full transition text-red-400 hover:bg-red-500/10 hover:text-red-300" title="Çıkış Yap">
               <LogOut size={18} />
             </button>
           </div>
@@ -1064,114 +1072,66 @@ export default function Home() {
         )}
 
         {/* Tab Toggle */}
-        <div className="p-2 bg-gray-100 dark:bg-slate-700 border-b flex gap-1">
+        {/* Tab Toggle */}
+        <div className="p-4 bg-[#1e293b] border-b border-slate-700 flex gap-2">
           <button
             onClick={() => setActiveTab('patients')}
             className={cn(
-              "flex-1 py-2 px-2 rounded-lg font-medium text-xs flex items-center justify-center gap-1 transition",
+              "flex-1 py-2.5 px-3 rounded-lg font-medium text-xs flex items-center justify-center gap-2 transition-all",
               activeTab === 'patients'
-                ? "bg-white dark:bg-slate-800 shadow text-teal-600"
-                : "text-gray-500 hover:bg-white/50"
+                ? "bg-[#0e7490] text-white shadow-lg shadow-[#0e7490]/20"
+                : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
             )}
           >
-            <Users size={14} /> Hastalar
+            <Users size={16} /> <span className="uppercase tracking-wide">Hastalar</span>
           </button>
           <button
             onClick={() => setActiveTab('appointments')}
             className={cn(
-              "flex-1 py-2 px-2 rounded-lg font-medium text-xs flex items-center justify-center gap-1 transition",
+              "flex-1 py-2.5 px-3 rounded-lg font-medium text-xs flex items-center justify-center gap-2 transition-all",
               activeTab === 'appointments'
-                ? "bg-white dark:bg-slate-800 shadow text-teal-600"
-                : "text-gray-500 hover:bg-white/50"
+                ? "bg-[#0e7490] text-white shadow-lg shadow-[#0e7490]/20"
+                : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
             )}
           >
-            <Calendar size={14} /> Randevular
+            <Calendar size={16} /> <span className="uppercase tracking-wide">Randevular</span>
           </button>
           {/* Dashboard tab - SADECE ADMIN ve HEKİM için */}
           {hasPermission.viewDashboard(currentUser.role) && (
             <button
               onClick={() => setActiveTab('dashboard')}
               className={cn(
-                "flex-1 py-2 px-2 rounded-lg font-medium text-xs flex items-center justify-center gap-1 transition",
+                "flex-1 py-2.5 px-3 rounded-lg font-medium text-xs flex items-center justify-center gap-2 transition-all",
                 activeTab === 'dashboard'
-                  ? "bg-white dark:bg-slate-800 shadow text-teal-600"
-                  : "text-gray-500 hover:bg-white/50"
+                  ? "bg-[#0e7490] text-white shadow-lg shadow-[#0e7490]/20"
+                  : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
               )}
             >
-              <LayoutDashboard size={14} /> Dashboard
+              <LayoutDashboard size={16} /> <span className="uppercase tracking-wide">Paneller</span>
             </button>
           )}
         </div>
 
         {/* Search & Add Patient */}
         {activeTab === 'patients' && (
-          <div className="p-4 border-b space-y-3 bg-gray-50 dark:bg-slate-800">
+          <div className="p-4 border-b border-slate-700 space-y-3 bg-[#0f172a]">
             <div className="relative">
-              <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+              <Search className="absolute left-3 top-2.5 text-slate-500" size={18} />
               <input
                 type="text"
                 placeholder={hasPermission.viewAllPatients(currentUser.role) ? "Tüm hastalarda ara..." : "Kendi hastalarında ara..."}
-                className="w-full pl-10 pr-4 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:ring-teal-500 transition bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800/50 focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0e7490] text-slate-200 placeholder:text-slate-500 transition shadow-inner"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
 
-            {/* Date Filter - Only for roles that can see all patients */}
-            {hasPermission.viewAllPatients(currentUser.role) && (
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                <button
-                  onClick={() => setDateFilter('all')}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition",
-                    dateFilter === 'all'
-                      ? "bg-teal-600 text-white shadow"
-                      : "bg-white dark:bg-slate-700 text-gray-600 dark:text-gray-300 border"
-                  )}
-                >
-                  Tümü
-                </button>
-                <button
-                  onClick={() => setDateFilter('today')}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition",
-                    dateFilter === 'today'
-                      ? "bg-teal-600 text-white shadow"
-                      : "bg-white dark:bg-slate-700 text-gray-600 dark:text-gray-300 border"
-                  )}
-                >
-                  Bugün
-                </button>
-                <button
-                  onClick={() => setDateFilter('yesterday')}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition",
-                    dateFilter === 'yesterday'
-                      ? "bg-teal-600 text-white shadow"
-                      : "bg-white dark:bg-slate-700 text-gray-600 dark:text-gray-300 border"
-                  )}
-                >
-                  Dün
-                </button>
-                <button
-                  onClick={() => setDateFilter('week')}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition",
-                    dateFilter === 'week'
-                      ? "bg-teal-600 text-white shadow"
-                      : "bg-white dark:bg-slate-700 text-gray-600 dark:text-gray-300 border"
-                  )}
-                >
-                  Son 7 Gün
-                </button>
-              </div>
-            )}
-
+            {/* New Patient Button */}
             <button
               onClick={handleNewPatientClick}
-              className="w-full bg-teal-600 text-white py-2 rounded-lg font-medium hover:bg-teal-700 transition flex justify-center items-center gap-2 shadow-sm"
+              className="w-full bg-[#cca43b] text-[#0f172a] py-2.5 rounded-xl font-bold hover:bg-[#b59030] transition flex justify-center items-center gap-2 shadow-lg shadow-[#cca43b]/20 active:scale-[0.98]"
             >
-              <Plus size={18} /> Yeni Hasta Ekle
+              <Plus size={18} /> YENİ HASTA EKLE
             </button>
           </div>
         )}

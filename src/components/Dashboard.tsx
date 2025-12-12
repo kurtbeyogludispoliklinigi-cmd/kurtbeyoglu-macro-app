@@ -63,7 +63,7 @@ interface QueueData {
     current_index: number;
 }
 
-const COLORS = ['#0d9488', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+const COLORS = ['#0e7490', '#cca43b', '#0f172a', '#64748b']; // Cyan-700, Gold, Slate-900, Slate-500, '#8b5cf6', '#ec4899'];
 
 export default function Dashboard({ patients, treatments, doctors, currentUser }: DashboardProps) {
     const [queueData, setQueueData] = useState<QueueData | null>(null);
@@ -279,27 +279,23 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard
                     icon={Users}
-                    label="Toplam Hasta"
+                    title="Toplam Hasta"
                     value={stats.totalPatients}
-                    color="bg-blue-500"
                 />
                 <StatCard
                     icon={ClipboardList}
-                    label="Toplam İşlem"
+                    title="Toplam İşlem"
                     value={stats.totalTreatments}
-                    color="bg-teal-500"
                 />
                 <StatCard
                     icon={Calendar}
-                    label="Bu Ay İşlem"
+                    title="Bu Ay İşlem"
                     value={stats.monthlyTreatments}
-                    color="bg-purple-500"
                 />
                 <StatCard
                     icon={Wallet}
-                    label="Toplam Ciro"
+                    title="Toplam Ciro"
                     value={`${stats.totalRevenue.toLocaleString('tr-TR')} ₺`}
-                    color="bg-emerald-500"
                 />
             </div>
 
@@ -619,21 +615,23 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
 
 interface StatCardProps {
     icon: React.ElementType;
-    label: string;
+    title: string;
     value: string | number;
-    color: string;
+    subValue?: string;
 }
 
-function StatCard({ icon: Icon, label, value, color }: StatCardProps) {
+function StatCard({ icon: Icon, title, value, subValue }: StatCardProps) {
     return (
-        <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-gray-200 dark:border-slate-700">
-            <div className="flex items-center gap-3">
-                <div className={`${color} p-2 rounded-lg text-white`}>
-                    <Icon size={20} />
-                </div>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-lg transition-all relative overflow-hidden group">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#0e7490] to-[#cca43b] opacity-80" />
+            <div className="flex items-center justify-between mb-2">
                 <div>
-                    <p className="text-xs md:text-sm text-gray-600 dark:text-gray-300 font-medium">{label}</p>
-                    <p className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white mt-2">{value}</p>
+                    <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider">{title}</p>
+                    <h3 className="text-2xl font-bold text-slate-800 mt-1">{value}</h3>
+                    {subValue && <p className="text-xs text-[#cca43b] font-medium mt-1">{subValue}</p>}
+                </div>
+                <div className="p-3 bg-slate-50 rounded-xl group-hover:bg-[#0e7490]/5 transition-colors">
+                    <Icon className="text-[#0e7490]" size={24} />
                 </div>
             </div>
         </div>

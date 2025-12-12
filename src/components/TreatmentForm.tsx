@@ -191,7 +191,7 @@ export function TreatmentForm({
   return (
     <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border mb-6">
       <h3 className="text-base md:text-lg font-semibold text-gray-700 mb-4 flex items-center gap-2">
-        <div className="bg-teal-100 p-1.5 rounded text-teal-700">
+        <div className="bg-[#0e7490]/10 p-1.5 rounded text-[#0e7490]">
           <Plus size={18} />
         </div>
         Yeni İşlem Ekle
@@ -202,22 +202,20 @@ export function TreatmentForm({
         <button
           type="button"
           onClick={() => setTreatmentMode('completed')}
-          className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${
-            treatmentMode === 'completed'
-              ? 'bg-teal-600 text-white shadow'
+          className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${treatmentMode === 'completed'
+              ? 'bg-[#0e7490] text-white shadow'
               : 'bg-white text-gray-600 hover:bg-gray-100'
-          }`}
+            }`}
         >
           ✓ Yapılan İşlem
         </button>
         <button
           type="button"
           onClick={() => setTreatmentMode('planned')}
-          className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${
-            treatmentMode === 'planned'
+          className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${treatmentMode === 'planned'
               ? 'bg-blue-600 text-white shadow'
               : 'bg-white text-gray-600 hover:bg-gray-100'
-          }`}
+            }`}
         >
           📅 Planlanan İşlem
         </button>
@@ -249,7 +247,7 @@ export function TreatmentForm({
             <input
               type="text"
               placeholder="16"
-              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none"
+              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none"
               value={formData.toothNo}
               onChange={(e) =>
                 setFormData({ ...formData, toothNo: e.target.value })
@@ -267,11 +265,10 @@ export function TreatmentForm({
               placeholder="Kanal Tedavisi"
               required
               list="treatment-suggestions"
-              className={`w-full p-2 border rounded-lg focus:ring-2 outline-none transition-colors ${
-                priceSuggestion.isNew
+              className={`w-full p-2 border rounded-lg focus:ring-2 outline-none transition-colors ${priceSuggestion.isNew
                   ? 'border-yellow-300 focus:ring-yellow-500 bg-yellow-50'
                   : 'border-green-300 focus:ring-green-500 bg-green-50'
-              }`}
+                }`}
               value={formData.procedure}
               onChange={(e) =>
                 setFormData({ ...formData, procedure: e.target.value })
@@ -298,7 +295,7 @@ export function TreatmentForm({
               type="number"
               step="0.01"
               placeholder="0.00"
-              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none"
+              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none"
               value={formData.cost}
               onChange={(e) =>
                 setFormData({ ...formData, cost: e.target.value })
@@ -325,11 +322,10 @@ export function TreatmentForm({
           formData.cost &&
           Number(formData.cost) !== priceSuggestion.standardPrice && (
             <div
-              className={`text-sm p-3 rounded-lg ${
-                discountInfo
+              className={`text-sm p-3 rounded-lg ${discountInfo
                   ? 'text-orange-700 bg-orange-50 border border-orange-200'
                   : 'text-blue-700 bg-blue-50 border border-blue-200'
-              }`}
+                }`}
             >
               <div className="flex items-center justify-between">
                 <span>
@@ -358,7 +354,7 @@ export function TreatmentForm({
             <input
               type="text"
               placeholder="Detay..."
-              className="flex-1 p-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none"
+              className="flex-1 p-2 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none"
               value={formData.notes}
               onChange={(e) =>
                 setFormData({ ...formData, notes: e.target.value })
@@ -380,7 +376,7 @@ export function TreatmentForm({
           <button
             type="submit"
             disabled={loading}
-            className="w-full sm:w-auto bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition shadow-sm font-medium disabled:opacity-50"
+            className="w-full sm:w-auto bg-[#0e7490] text-white px-6 py-2 rounded-lg hover:bg-[#155e75] transition shadow-sm font-medium disabled:opacity-50"
           >
             {loading ? '...' : 'Kaydet'}
           </button>
