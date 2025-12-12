@@ -1003,7 +1003,7 @@ export default function Home() {
         )}>
           <div>
             <h1 className="font-bold text-lg flex items-center gap-2">
-              <img src="/logo-placeholder.svg" alt="Logo" className="w-8 h-8 rounded-lg bg-white p-1" />
+              <img src="/logo.png" alt="Logo" className="w-8 h-8 rounded-lg bg-white p-1 object-contain" />
               <div className="flex flex-col">
                 <span>{currentUser.name}</span>
                 <span className="text-[10px] font-normal opacity-90">Özel Kurtbeyoğlu Polikliniği</span>
