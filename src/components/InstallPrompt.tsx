@@ -106,7 +106,7 @@ export function InstallPrompt() {
                         </div>
                         <div className="flex-1">
                             <h3 className="font-semibold text-gray-800 dark:text-gray-100">
-                                Ana Ekrana Ekle
+                                Kurtbeyoğlu ADSP Macro
                             </h3>
                             {isSafari ? (
                                 <div className="text-sm text-gray-500 dark:text-gray-400 mt-2 space-y-2">
@@ -122,7 +122,7 @@ export function InstallPrompt() {
                                 </div>
                             ) : (
                                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                                    Özel Kurtbeyoğlu App uygulamasını ana ekranınıza ekleyerek daha hızlı erişin.
+                                    Kurtbeyoğlu ADSP Macro uygulamasını ana ekranınıza ekleyerek daha hızlı erişin.
                                 </p>
                             )}
                         </div>

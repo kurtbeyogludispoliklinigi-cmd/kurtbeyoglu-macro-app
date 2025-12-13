@@ -9,6 +9,7 @@ import {
     Users, Activity, TrendingUp, Calendar,
     Wallet, ClipboardList, Download, RotateCcw
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { ExportButtons } from './ReportExport';
 import { supabase } from '@/lib/supabase';
 
@@ -276,7 +277,12 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
     return (
         <div className="p-6 space-y-6 overflow-y-auto h-full">
             {/* Stats Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                className="grid grid-cols-2 md:grid-cols-4 gap-4"
+            >
                 <StatCard
                     icon={Users}
                     title="Toplam Hasta"
@@ -297,7 +303,7 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
                     title="Toplam Ciro"
                     value={`${stats.totalRevenue.toLocaleString('tr-TR')} ₺`}
                 />
-            </div>
+            </motion.div>
 
             {/* Daily Doctor Distribution - Admin Only */}
             {currentUser.role === 'admin' && (

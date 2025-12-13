@@ -1,53 +1,66 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8fafc; /* Slate-50 - Crisp, premium light grey */
-  --foreground: #0f172a; /* Slate-900 - Deep crisp black */
+  --background: #f8fafc;
+  /* Slate-50 - Crisp, premium light grey */
+  --foreground: #0f172a;
+  /* Slate-900 - Deep crisp black */
   --card-bg: #ffffff;
-  --card-border: #e2e8f0; /* Slate-200 */
-  --muted: #f1f5f9; /* Slate-100 */
-  --muted-foreground: #64748b; /* Slate-500 */
-  
+  --card-border: #e2e8f0;
+  /* Slate-200 */
+  --muted: #f1f5f9;
+  /* Slate-100 */
+  --muted-foreground: #64748b;
+  /* Slate-500 */
+
   /* Primary: Deep Turquoise / Petrol Blue */
-  --primary: #0e7490; /* Cyan-700 */
+  --primary: #0e7490;
+  /* Cyan-700 */
   --primary-foreground: #ffffff;
-  
+
   /* Secondary: Gold */
   --secondary: #cca43b;
   --secondary-foreground: #ffffff;
-  
+
   /* Layout */
-  --sidebar-bg: #0f172a; /* Slate-900 - Prestige Dark */
+  --sidebar-bg: #0f172a;
+  /* Slate-900 - Prestige Dark */
   --sidebar-fg: #f8fafc;
   --header-bg: #ffffff;
   --header-fg: #0f172a;
-  
+
   --input-bg: #ffffff;
   --input-border: #cbd5e1;
 }
 
 .dark {
-  --background: #020617; /* Slate-950 */
+  --background: #020617;
+  /* Slate-950 */
   --foreground: #f8fafc;
-  --card-bg: #0f172a; /* Slate-900 */
-  --card-border: #1e293b; /* Slate-800 */
+  --card-bg: #0f172a;
+  /* Slate-900 */
+  --card-border: #1e293b;
+  /* Slate-800 */
   --muted: #1e293b;
   --muted-foreground: #94a3b8;
-  
+
   /* Primary: Lighter Turquoise for dark mode */
-  --primary: #06b6d4; /* Cyan-500 */
+  --primary: #06b6d4;
+  /* Cyan-500 */
   --primary-foreground: #0f172a;
-  
+
   /* Secondary: Gold */
-  --secondary: #fbbf24; /* Amber-400 */
+  --secondary: #fbbf24;
+  /* Amber-400 */
   --secondary-foreground: #0f172a;
 
   /* Layout */
-  --sidebar-bg: #020617; /* Black/Darkest Slate */
+  --sidebar-bg: #020617;
+  /* Black/Darkest Slate */
   --sidebar-fg: #f8fafc;
   --header-bg: #0f172a;
   --header-fg: #f8fafc;
-  
+
   --input-bg: #0f172a;
   --input-border: #334155;
 }
@@ -85,7 +98,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
@@ -113,4 +126,3 @@ body {
 .border-input {
   border-color: var(--input-border);
 }
-
