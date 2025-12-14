@@ -1235,7 +1235,7 @@ export default function Home() {
                 </div>
 
                 <div className="mt-4">
-                  <PatientImageGallery patientId={activePatient.id} currentUser={currentUser} />
+
                 </div>
 
                 {activePatient.anamnez && (
@@ -1275,6 +1275,10 @@ export default function Home() {
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-24">
+
+              <div className="mb-6">
+                <PatientImageGallery patientId={activePatient.id} currentUser={currentUser} />
+              </div>
 
               {(hasPermission.addTreatment(currentUser.role) &&
                 ((currentUser.role === 'admin' || currentUser.role === 'asistan') ||

@@ -132,113 +132,83 @@ export function PatientImageGallery({ patientId, currentUser }: Props) {
             </div>
 
             {/* Content */}
-            <div className="p-4">
+            {/* Content */}
+            <div className="p-3">
                 {images.length === 0 ? (
                     <div
                         onClick={handleUploadClick}
-                        className="flex flex-col items-center justify-center py-12 px-4 border-2 border-dashed border-gray-200 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-750 cursor-pointer transition-colors"
+                        className="flex flex-col items-center justify-center py-6 px-4 border-2 border-dashed border-gray-200 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-750 cursor-pointer transition-colors"
                     >
-                        <div className="w-12 h-12 bg-blue-50 dark:bg-slate-700 rounded-full flex items-center justify-center mb-3">
-                            <Upload className="w-6 h-6 text-blue-500" />
+                        <div className="w-10 h-10 bg-blue-50 dark:bg-slate-700 rounded-full flex items-center justify-center mb-2">
+                            <Upload className="w-5 h-5 text-blue-500" />
                         </div>
-                        <p className="text-gray-900 dark:text-gray-200 font-medium">Henüz film yüklenmemiş</p>
-                        <p className="text-sm text-gray-500 mt-1">Görsel yüklemek için tıklayın</p>
+                        <p className="text-gray-900 dark:text-gray-200 font-medium text-sm">Film Yükle</p>
                     </div>
                 ) : (
-                    <div className="flex flex-col gap-4">
+                    <div
+                        className="relative h-48 bg-black rounded-lg overflow-hidden group cursor-pointer shadow-md transition-all hover:shadow-lg hover:ring-2 ring-blue-500/50"
+                        onClick={() => setShowFullscreen(true)}
+                    >
+                        {/* Main Preview Image */}
+                        <img
+                            src={getImageUrl(currentImage.file_path)}
+                            alt="Film Preview"
+                            className="w-full h-full object-contain opacity-90 group-hover:opacity-100 transition-opacity"
+                        />
 
-                        {/* Viewer Area */}
-                        <div className="relative group bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center">
-                            {/* Navigation buttons */}
-                            <button
-                                onClick={(e) => { e.stopPropagation(); goToPrev(); }}
-                                disabled={currentIndex === 0}
-                                className="absolute left-2 z-10 p-2 bg-black/50 text-white rounded-full disabled:opacity-30 disabled:cursor-not-allowed hover:bg-black/70 transition-colors"
-                            >
-                                <ChevronLeft className="w-6 h-6" />
-                            </button>
+                        {/* Overlay Gradient */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent" />
 
-                            <button
-                                onClick={(e) => { e.stopPropagation(); goToNext(); }}
-                                disabled={currentIndex === images.length - 1}
-                                className="absolute right-2 z-10 p-2 bg-black/50 text-white rounded-full disabled:opacity-30 disabled:cursor-not-allowed hover:bg-black/70 transition-colors"
-                            >
-                                <ChevronRight className="w-6 h-6" />
-                            </button>
+                        {/* Center Action Indicator */}
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+                            <div className="bg-white/20 backdrop-blur-md p-3 rounded-full">
+                                <ZoomIn className="w-8 h-8 text-white" />
+                            </div>
+                        </div>
 
-                            {/* Main Image */}
-                            <img
-                                src={getImageUrl(currentImage.file_path)}
-                                alt={`${currentImage.film_type} - ${currentImage.capture_date}`}
-                                className="max-h-full max-w-full object-contain cursor-zoom-in"
-                                onClick={() => setShowFullscreen(true)}
-                            />
+                        {/* Bottom Info Strip */}
+                        <div className="absolute bottom-0 inset-x-0 p-3 flex items-end justify-between text-white">
+                            <div>
+                                <div className="flex items-center gap-2 mb-0.5">
+                                    <span className={clsx(
+                                        "px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
+                                        currentImage.film_type === 'panoramik' ? "bg-blue-500" : "bg-purple-500"
+                                    )}>
+                                        {currentImage.film_type}
+                                    </span>
+                                    <span className="text-xs text-gray-300 font-medium">
+                                        {new Date(currentImage.capture_date).toLocaleDateString('tr-TR')}
+                                    </span>
+                                </div>
+                                {currentImage.notes && (
+                                    <p className="text-[10px] text-gray-400 line-clamp-1 max-w-[200px]">{currentImage.notes}</p>
+                                )}
+                            </div>
 
-                            {/* Overlays */}
-                            <div className="absolute top-4 left-4 flex gap-2">
-                                <span className={clsx(
-                                    "px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider backdrop-blur-md",
-                                    currentImage.film_type === 'panoramik'
-                                        ? "bg-blue-500/80 text-white"
-                                        : "bg-purple-500/80 text-white"
-                                )}>
-                                    {currentImage.film_type}
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold bg-white/20 px-2 py-0.5 rounded-full">
+                                    {currentIndex + 1} / {images.length}
                                 </span>
                             </div>
-
-                            <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/80 to-transparent text-white">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <Calendar className="w-4 h-4 opacity-70" />
-                                            <span className="font-medium text-lg">
-                                                {new Date(currentImage.capture_date).toLocaleDateString('tr-TR')}
-                                            </span>
-                                        </div>
-                                        {currentImage.notes && (
-                                            <p className="text-sm text-gray-200 line-clamp-1">{currentImage.notes}</p>
-                                        )}
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <button
-                                            onClick={() => setShowFullscreen(true)}
-                                            className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                                            title="Tam ekran"
-                                        >
-                                            <ZoomIn className="w-5 h-5 text-white" />
-                                        </button>
-                                        <button
-                                            onClick={handleDeleteClick}
-                                            className="p-2 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded-full transition-colors"
-                                            title="Sil"
-                                        >
-                                            <Trash2 className="w-5 h-5" />
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
 
-                        {/* Pagination / Thumbnails Indicator */}
-                        <div className="flex justify-center gap-1.5 overflow-x-auto py-2">
-                            {images.map((_, idx) => (
+                        {/* Navigation Arrows (Mini) */}
+                        {images.length > 1 && (
+                            <>
                                 <button
-                                    key={idx}
-                                    onClick={() => setCurrentIndex(idx)}
-                                    className={clsx(
-                                        "w-2 h-2 rounded-full transition-all",
-                                        idx === currentIndex
-                                            ? "bg-blue-600 w-4"
-                                            : "bg-gray-300 dark:bg-slate-600 hover:bg-gray-400"
-                                    )}
-                                />
-                            ))}
-                        </div>
-
-                        <div className="text-xs text-center text-gray-400">
-                            Yükleyen: {currentImage.uploaded_by_name || 'Bilinmiyor'} • {new Date(currentImage.created_at).toLocaleString('tr-TR')}
-                        </div>
-
+                                    onClick={(e) => { e.stopPropagation(); goToPrev(); }}
+                                    className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 bg-black/40 hover:bg-black/80 text-white rounded-full transition opacity-0 group-hover:opacity-100"
+                                >
+                                    <ChevronLeft className="w-5 h-5" />
+                                </button>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); goToNext(); }}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-black/40 hover:bg-black/80 text-white rounded-full transition opacity-0 group-hover:opacity-100"
+                                >
+                                    <ChevronRight className="w-5 h-5" />
+                                </button>
+                            </>
+                        )}
                     </div>
                 )}
             </div>
@@ -344,24 +314,74 @@ export function PatientImageGallery({ patientId, currentUser }: Props) {
 
             {/* Fullscreen Modal */}
             {showFullscreen && currentImage && (
-                <div className="fixed inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center backdrop-blur-sm">
+                <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center backdrop-blur-sm"
+                    onClick={() => setShowFullscreen(false)}>
+
+                    {/* Top Controls */}
+                    <div className="absolute top-0 inset-x-0 p-4 flex justify-between items-center z-10 bg-gradient-to-b from-black/50 to-transparent">
+                        <div className="flex items-center gap-2">
+                            <span className={clsx(
+                                "px-2 py-1 rounded text-xs font-bold uppercase",
+                                currentImage.film_type === 'panoramik' ? "bg-blue-600 text-white" : "bg-purple-600 text-white"
+                            )}>
+                                {currentImage.film_type}
+                            </span>
+                            <span className="text-white/80 text-sm font-medium">
+                                {new Date(currentImage.capture_date).toLocaleDateString('tr-TR')}
+                            </span>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteClick();
+                                }}
+                                className="p-2 bg-white/10 hover:bg-red-500/20 text-white hover:text-red-400 rounded-full transition-colors"
+                                title="Bu filmi sil"
+                            >
+                                <Trash2 className="w-5 h-5" />
+                            </button>
+                            <button
+                                onClick={() => setShowFullscreen(false)}
+                                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+                            >
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Navigation Buttons */}
                     <button
-                        onClick={() => setShowFullscreen(false)}
-                        className="absolute top-4 right-4 p-2 bg-white/10 text-white hover:bg-white/20 rounded-full"
+                        onClick={(e) => { e.stopPropagation(); goToPrev(); }}
+                        disabled={currentIndex === 0}
+                        className="absolute left-4 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-colors backdrop-blur-md"
                     >
-                        <X className="w-6 h-6" />
+                        <ChevronLeft className="w-8 h-8" />
                     </button>
 
+                    <button
+                        onClick={(e) => { e.stopPropagation(); goToNext(); }}
+                        disabled={currentIndex === images.length - 1}
+                        className="absolute right-4 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-colors backdrop-blur-md"
+                    >
+                        <ChevronRight className="w-8 h-8" />
+                    </button>
+
+                    {/* Main Image */}
                     <img
+                        onClick={(e) => e.stopPropagation()}
                         src={getImageUrl(currentImage.file_path)}
                         alt="Fullscreen View"
-                        className="max-w-[95vw] max-h-[90vh] object-contain"
+                        className="max-w-full max-h-[85vh] object-contain shadow-2xl"
                     />
 
-                    <div className="absolute bottom-4 text-white/80 text-center">
-                        <p className="font-medium text-lg">{new Date(currentImage.capture_date).toLocaleDateString('tr-TR')} - {currentImage.film_type.toUpperCase()}</p>
-                        {currentImage.notes && <p className="text-sm mt-1">{currentImage.notes}</p>}
-                    </div>
+                    {/* Bottom Caption */}
+                    {currentImage.notes && (
+                        <div className="absolute bottom-8 px-6 py-3 bg-black/60 backdrop-blur-md rounded-full text-white/90 text-center max-w-2xl mx-4">
+                            <p className="text-sm font-medium">{currentImage.notes}</p>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
