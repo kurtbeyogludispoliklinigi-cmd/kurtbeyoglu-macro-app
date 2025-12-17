@@ -198,7 +198,7 @@ export function TreatmentForm({
       </h3>
 
       {/* Treatment Mode Selection */}
-      <div className="mb-4 flex gap-3 p-3 bg-gray-50 rounded-lg">
+      <div className="mb-4 flex flex-col md:flex-row gap-3 p-3 bg-gray-50 rounded-lg">
         <button
           type="button"
           onClick={() => setTreatmentMode('completed')}
@@ -224,30 +224,30 @@ export function TreatmentForm({
       {/* Planned Date Field (conditional) */}
       {treatmentMode === 'planned' && (
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <label className="block text-xs font-medium text-blue-700 mb-1">
+          <label className="block text-xs font-semibold text-blue-700 mb-1">
             Planlanan Tarih
           </label>
           <input
             type="date"
             value={plannedDate}
             onChange={(e) => setPlannedDate(e.target.value)}
-            className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+            className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
             required
           />
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Tooth Number */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">
+            <label className="block text-xs font-semibold text-gray-600 mb-1">
               Diş No
             </label>
             <input
               type="text"
               placeholder="16"
-              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none"
+              className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none"
               value={formData.toothNo}
               onChange={(e) =>
                 setFormData({ ...formData, toothNo: e.target.value })
@@ -256,8 +256,8 @@ export function TreatmentForm({
           </div>
 
           {/* Treatment Procedure with Autocomplete */}
-          <div className="sm:col-span-2 lg:col-span-1">
-            <label className="block text-xs font-medium text-gray-500 mb-1">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">
               Yapılan İşlem
             </label>
             <input
@@ -265,7 +265,7 @@ export function TreatmentForm({
               placeholder="Kanal Tedavisi"
               required
               list="treatment-suggestions"
-              className={`w-full p-2 border rounded-lg focus:ring-2 outline-none transition-colors ${priceSuggestion.isNew
+              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 outline-none transition-colors ${priceSuggestion.isNew
                   ? 'border-yellow-300 focus:ring-yellow-500 bg-yellow-50'
                   : 'border-green-300 focus:ring-green-500 bg-green-50'
                 }`}
@@ -288,14 +288,14 @@ export function TreatmentForm({
 
           {/* Cost */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">
+            <label className="block text-xs font-semibold text-gray-600 mb-1">
               Ücret (TL)
             </label>
             <input
               type="number"
               step="0.01"
               placeholder="0.00"
-              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none"
+              className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none"
               value={formData.cost}
               onChange={(e) =>
                 setFormData({ ...formData, cost: e.target.value })
@@ -347,14 +347,14 @@ export function TreatmentForm({
 
         {/* Notes with Voice Input */}
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">
+          <label className="block text-xs font-semibold text-gray-600 mb-1">
             Notlar
           </label>
           <div className="flex gap-2">
             <input
               type="text"
               placeholder="Detay..."
-              className="flex-1 p-2 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none"
+              className="flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none"
               value={formData.notes}
               onChange={(e) =>
                 setFormData({ ...formData, notes: e.target.value })
@@ -376,7 +376,7 @@ export function TreatmentForm({
           <button
             type="submit"
             disabled={loading}
-            className="w-full sm:w-auto bg-[#0e7490] text-white px-6 py-2 rounded-lg hover:bg-[#155e75] transition shadow-sm font-medium disabled:opacity-50"
+            className="w-full sm:w-auto bg-[#0e7490] text-white px-6 py-3 rounded-lg hover:bg-[#155e75] transition shadow-sm font-medium disabled:opacity-50 min-h-[44px]"
           >
             {loading ? '...' : 'Kaydet'}
           </button>

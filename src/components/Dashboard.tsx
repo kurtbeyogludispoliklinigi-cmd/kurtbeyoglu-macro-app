@@ -55,6 +55,7 @@ interface DashboardProps {
     treatments: Treatment[];
     doctors: Doctor[];
     currentUser: Doctor;
+    loading?: boolean;
 }
 
 interface QueueData {
@@ -66,7 +67,31 @@ interface QueueData {
 
 const COLORS = ['#0e7490', '#cca43b', '#0f172a', '#64748b']; // Cyan-700, Gold, Slate-900, Slate-500, '#8b5cf6', '#ec4899'];
 
-export default function Dashboard({ patients, treatments, doctors, currentUser }: DashboardProps) {
+// Skeleton Components
+const StatCardSkeleton = () => (
+    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 animate-pulse relative overflow-hidden">
+        <div className="flex items-center justify-between mb-2">
+            <div className="space-y-3 w-full">
+                <div className="w-24 h-3 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                <div className="w-16 h-8 bg-slate-200 dark:bg-slate-700 rounded"></div>
+            </div>
+            <div className="w-12 h-12 bg-slate-100 dark:bg-slate-700 rounded-xl"></div>
+        </div>
+    </div>
+);
+
+const ChartSkeleton = () => (
+    <div className="bg-white dark:bg-slate-800 rounded-xl p-4 md:p-6 shadow-sm border border-gray-200 dark:border-slate-700 animate-pulse h-full">
+        <div className="w-48 h-6 bg-slate-200 dark:bg-slate-700 rounded mb-6"></div>
+        <div className="flex items-end gap-4 h-[calc(100%-4rem)] px-4 pb-4">
+            {[1, 2, 3, 4, 5, 6].map(i => (
+                <div key={i} className="flex-1 bg-slate-100 dark:bg-slate-700 rounded-t" style={{ height: `${Math.random() * 60 + 20}%` }}></div>
+            ))}
+        </div>
+    </div>
+);
+
+export default function Dashboard({ patients, treatments, doctors, currentUser, loading = false }: DashboardProps) {
     const [queueData, setQueueData] = useState<QueueData | null>(null);
     const [loadingQueue, setLoadingQueue] = useState(false);
 
@@ -190,14 +215,40 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
         const now = new Date();
         const thisMonth = now.getMonth();
         const thisYear = now.getFullYear();
+        const todayStr = now.toDateString();
+
+        // Start of week (Monday)
+        const startOfWeek = new Date(now);
+        const day = startOfWeek.getDay() || 7;
+        if (day !== 1) startOfWeek.setDate(now.getDate() - (day - 1));
+        startOfWeek.setHours(0, 0, 0, 0);
 
         const monthlyTreatments = filteredTreatments.filter(t => {
             const date = new Date(t.created_at);
             return date.getMonth() === thisMonth && date.getFullYear() === thisYear;
         });
 
+        const weeklyTreatments = filteredTreatments.filter(t => {
+            const date = new Date(t.created_at);
+            return date >= startOfWeek;
+        });
+
+        const todayTreatments = filteredTreatments.filter(t => {
+            const date = new Date(t.created_at);
+            return date.toDateString() === todayStr;
+        });
+
         const totalRevenue = filteredTreatments.reduce((sum, t) => sum + (t.cost || 0), 0);
         const monthlyRevenue = monthlyTreatments.reduce((sum, t) => sum + (t.cost || 0), 0);
+        const weeklyRevenue = weeklyTreatments.reduce((sum, t) => sum + (t.cost || 0), 0);
+        const todayRevenue = todayTreatments.reduce((sum, t) => sum + (t.cost || 0), 0);
+
+        const pendingAmount = filteredTreatments.reduce((sum, t) => {
+            if (t.payment_status === 'paid') return sum;
+            const cost = t.cost || 0;
+            const paid = t.payment_amount || 0;
+            return sum + (cost - paid);
+        }, 0);
 
         return {
             totalPatients: filteredPatients.length,
@@ -205,6 +256,9 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
             monthlyTreatments: monthlyTreatments.length,
             totalRevenue,
             monthlyRevenue,
+            weeklyRevenue,
+            todayRevenue,
+            pendingAmount
         };
     }, [filteredPatients, filteredTreatments]);
 
@@ -274,15 +328,74 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
         return Object.values(performance);
     }, [currentUser, doctors, patients, treatments]);
 
+    if (loading) {
+        return (
+            <div className="p-4 md:p-6 space-y-6 overflow-y-auto h-full">
+                {/* Stats Cards Skeleton */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {[1, 2, 3, 4].map(i => <StatCardSkeleton key={i} />)}
+                </div>
+
+                {/* Queue/Admin Table Skeleton */}
+                {currentUser.role === 'admin' && (
+                    <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-slate-700 animate-pulse">
+                        <div className="h-6 w-48 bg-slate-200 dark:bg-slate-700 rounded mb-4"></div>
+                        <div className="space-y-3">
+                            {[1, 2, 3].map(i => (
+                                <div key={i} className="h-12 bg-slate-100 dark:bg-slate-700 rounded"></div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Charts Skeleton */}
+                <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-slate-700 h-64 animate-pulse">
+                    <div className="h-6 w-32 bg-slate-200 dark:bg-slate-700 rounded mb-6"></div>
+                    <div className="h-40 bg-slate-100 dark:bg-slate-700 rounded"></div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <ChartSkeleton />
+                    {currentUser.role === 'admin' && <ChartSkeleton />}
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="p-6 space-y-6 overflow-y-auto h-full">
+        <div className="p-4 md:p-6 space-y-6 overflow-y-auto h-full">
             {/* Stats Cards */}
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
-                className="grid grid-cols-2 md:grid-cols-4 gap-4"
+                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
             >
+                <StatCard
+                    icon={Activity}
+                    title="Bugün Ciro"
+                    value={`${stats.todayRevenue.toLocaleString('tr-TR')} ₺`}
+                    subValue={`${new Date().toLocaleDateString('tr-TR', { weekday: 'long' })}`}
+                />
+                <StatCard
+                    icon={TrendingUp}
+                    title="Bu Hafta"
+                    value={`${stats.weeklyRevenue.toLocaleString('tr-TR')} ₺`}
+                />
+                <StatCard
+                    icon={Wallet}
+                    title="Bu Ay"
+                    value={`${stats.monthlyRevenue.toLocaleString('tr-TR')} ₺`}
+                />
+                <StatCard
+                    icon={RotateCcw}
+                    title="Bekleyen Alacak"
+                    value={`${stats.pendingAmount.toLocaleString('tr-TR')} ₺`}
+                    subValue="Tahsil edilecek"
+                    color="text-red-500"
+                />
+
+                {/* Secondary Stats Row */}
                 <StatCard
                     icon={Users}
                     title="Toplam Hasta"
@@ -454,12 +567,12 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
             )}
 
             {/* Monthly Revenue Chart */}
-            <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-slate-700">
+            <div className="bg-white dark:bg-slate-800 rounded-xl p-4 md:p-6 shadow-sm border border-gray-200 dark:border-slate-700">
                 <h3 className="text-base md:text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
                     <TrendingUp size={20} className="text-teal-500" />
                     Aylık Gelir Grafiği
                 </h3>
-                <div className="h-64">
+                <div className="h-64 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={monthlyData}>
                             <defs>
@@ -502,13 +615,13 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Procedure Breakdown */}
-                <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-slate-700">
+                <div className="bg-white dark:bg-slate-800 rounded-xl p-4 md:p-6 shadow-sm border border-gray-200 dark:border-slate-700">
                     <h3 className="text-base md:text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
                         <Activity size={20} className="text-purple-500" />
                         En Çok Yapılan İşlemler
                     </h3>
                     {procedureData.length > 0 ? (
-                        <div className="h-48">
+                        <div className="h-48 w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie
@@ -540,13 +653,13 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
 
                 {/* Doctor Performance (Admin Only) */}
                 {currentUser.role === 'admin' && (
-                    <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-slate-700">
+                    <div className="bg-white dark:bg-slate-800 rounded-xl p-4 md:p-6 shadow-sm border border-gray-200 dark:border-slate-700">
                         <h3 className="text-base md:text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
                             <Users size={20} className="text-indigo-500" />
                             Hekim Performansı
                         </h3>
                         {doctorPerformance.length > 0 ? (
-                            <div className="h-48">
+                            <div className="h-48 w-full">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={doctorPerformance} layout="vertical">
                                         <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -589,7 +702,7 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
             </div>
 
             {/* Monthly Revenue Card */}
-            <div className="bg-gradient-to-r from-teal-500 to-emerald-500 rounded-xl p-6 text-white shadow-lg">
+            <div className="bg-gradient-to-r from-teal-500 to-emerald-500 rounded-xl p-4 md:p-6 text-white shadow-lg">
                 <div className="flex justify-between items-start">
                     <div>
                         <h3 className="text-lg font-semibold opacity-90">Bu Ay Toplam Gelir</h3>
@@ -605,7 +718,7 @@ export default function Dashboard({ patients, treatments, doctors, currentUser }
             </div>
 
             {/* Export Section */}
-            <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-slate-700">
+            <div className="bg-white dark:bg-slate-800 rounded-xl p-4 md:p-6 shadow-sm border border-gray-200 dark:border-slate-700">
                 <h3 className="text-base md:text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
                     <Download size={20} className="text-gray-500" />
                     Rapor İndir
@@ -624,16 +737,17 @@ interface StatCardProps {
     title: string;
     value: string | number;
     subValue?: string;
+    color?: string;
 }
 
-function StatCard({ icon: Icon, title, value, subValue }: StatCardProps) {
+function StatCard({ icon: Icon, title, value, subValue, color }: StatCardProps) {
     return (
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-lg transition-all relative overflow-hidden group">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#0e7490] to-[#cca43b] opacity-80" />
             <div className="flex items-center justify-between mb-2">
                 <div>
                     <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider">{title}</p>
-                    <h3 className="text-2xl font-bold text-slate-800 mt-1">{value}</h3>
+                    <h3 className={`text-2xl font-bold mt-1 ${color ? color : 'text-slate-800 dark:text-gray-100'}`}>{value}</h3>
                     {subValue && <p className="text-xs text-[#cca43b] font-medium mt-1">{subValue}</p>}
                 </div>
                 <div className="p-3 bg-slate-50 rounded-xl group-hover:bg-[#0e7490]/5 transition-colors">

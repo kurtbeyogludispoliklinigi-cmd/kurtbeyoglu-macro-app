@@ -1,14 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   User, Users, Lock, LogOut, Shield, Plus, Search, Trash2,
-  Save, RefreshCcw, Phone, Activity, Clock, Cloud, WifiOff, Edit, LayoutDashboard, Calendar, Menu, X, DollarSign
+  Save, RefreshCcw, Phone, Activity, Clock, Cloud, WifiOff, Edit, LayoutDashboard, Calendar, Menu, X, DollarSign, ArrowLeft, Loader2, Banknote
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import AIAssistant from '@/components/AIAssistant';
+import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/useToast';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import Dashboard from '@/components/Dashboard';
@@ -20,6 +21,7 @@ import { AppointmentList } from '@/components/AppointmentList';
 import { TreatmentForm } from '@/components/TreatmentForm';
 import { HelpButton } from '@/components/HelpModal';
 import { PatientImageGallery } from '@/components/PatientImageGallery';
+import { PaymentQuickAccess } from '@/components/PaymentQuickAccess';
 
 // Helper for classes
 function cn(...inputs: (string | undefined | null | false)[]) {
@@ -116,6 +118,12 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [dbError, setDbError] = useState(false);
 
+  // Pull to Refresh State
+  const [pullStart, setPullStart] = useState(0);
+  const [pullChange, setPullChange] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+
   // Selection
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -146,6 +154,15 @@ export default function Home() {
   // Mobile sidebar toggle - default closed on mobile
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
 
+  // Mobile detection
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   // Forms
   const [newPatient, setNewPatient] = useState({ name: '', phone: '', anamnez: '' });
   const [showEditPatientModal, setShowEditPatientModal] = useState(false);
@@ -173,6 +190,7 @@ export default function Home() {
   }
   const [queueData, setQueueData] = useState<QueueData | null>(null);
   const [doctorSelectionMethod, setDoctorSelectionMethod] = useState<'manual' | 'queue' | null>(null);
+  const [showPaymentQuickAccess, setShowPaymentQuickAccess] = useState(false);
 
   // Track recent queue assignments for consecutive detection
   const [recentQueueAssignments, setRecentQueueAssignments] = useState<{
@@ -284,7 +302,10 @@ export default function Home() {
     // Search filtering
     list = list.filter((p: Patient) =>
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.phone && p.phone.includes(searchTerm))
+      (p.phone && (
+        p.phone.includes(searchTerm) ||
+        p.phone.replace(/\D/g, '').includes(searchTerm.replace(/\D/g, ''))
+      ))
     );
 
     // Date filtering (only for users who can see all patients)
@@ -433,6 +454,38 @@ export default function Home() {
   }, [showAddUserModal]);
 
   // --- HANDLERS ---
+  // --- PULL TO REFRESH HANDLERS ---
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (listRef.current && listRef.current.scrollTop === 0) {
+      setPullStart(e.targetTouches[0].clientY);
+    } else {
+      setPullStart(0);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!pullStart) return;
+    const currentY = e.targetTouches[0].clientY;
+    const diff = currentY - pullStart;
+    if (diff > 0 && diff < 200) {
+      setPullChange(diff);
+    }
+  };
+
+  const handleTouchEnd = async () => {
+    if (!pullStart) return;
+    if (pullChange > 80) { // Threshold
+      setIsRefreshing(true);
+      setPullChange(80); // Snap to loading height
+      await fetchData(); // Refresh
+      setIsRefreshing(false);
+      setPullChange(0);
+    } else {
+      setPullChange(0);
+    }
+    setPullStart(0);
+  };
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const user = users.find((u: Doctor) => u.id === selectedLoginUser);
@@ -869,6 +922,44 @@ export default function Home() {
     setLoading(false);
   };
 
+  const handleQuickPaymentSubmit = async (treatmentId: string, amount: number, method: string) => {
+    const treatment = treatments.find(t => t.id === treatmentId);
+    if (!treatment) return;
+
+    const currentPaid = treatment.payment_amount || 0;
+    const totalPaid = currentPaid + amount;
+    const remaining = (treatment.cost || 0) - totalPaid;
+
+    // Status update logic
+    // Tolerance for floating point errors could be added, but minimal for now
+    const status = remaining <= 0.1 ? 'paid' : 'partial';
+
+    // Determine method label
+    const methodLabel = method === 'cash' ? 'Nakit' : method === 'credit_card' ? 'KK' : 'Havale';
+    const dateStr = new Date().toLocaleDateString('tr-TR');
+
+    const note = treatment.payment_note
+      ? `${treatment.payment_note}\n- ${amount}₺ ${methodLabel} (${dateStr})`
+      : `- ${amount}₺ ${methodLabel} (${dateStr})`;
+
+    const updates = {
+      payment_amount: totalPaid,
+      payment_status: status,
+      payment_note: note,
+      // payment_date: new Date().toISOString() // Uncomment if column exists
+    };
+
+    const { error } = await supabase.from('treatments').update(updates).eq('id', treatmentId);
+
+    if (error) {
+      console.error("Payment Error:", error);
+      toast({ type: 'error', message: 'Ödeme kaydedilemedi' });
+      throw error;
+    } else {
+      toast({ type: 'success', message: 'Ödeme alındı' });
+      fetchData(); // Refresh data
+    }
+  };
 
   // --- RENDER ---
 
@@ -1127,17 +1218,48 @@ export default function Home() {
             </div>
 
             {/* New Patient Button */}
-            <button
-              onClick={handleNewPatientClick}
-              className="w-full bg-[#cca43b] text-[#0f172a] py-2.5 rounded-xl font-bold hover:bg-[#b59030] transition flex justify-center items-center gap-2 shadow-lg shadow-[#cca43b]/20 active:scale-[0.98]"
-            >
-              <Plus size={18} /> YENİ HASTA EKLE
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleNewPatientClick}
+                className="flex-1 bg-[#cca43b] text-[#0f172a] py-2.5 rounded-xl font-bold hover:bg-[#b59030] transition flex justify-center items-center gap-2 shadow-lg shadow-[#cca43b]/20 active:scale-[0.98] text-sm"
+              >
+                <Plus size={18} /> YENİ HASTA
+              </button>
+              {hasPermission.addPayment(currentUser.role) && (
+                <button
+                  onClick={() => setShowPaymentQuickAccess(true)}
+                  className="flex-1 bg-teal-600 text-white py-2.5 rounded-xl font-bold hover:bg-teal-700 transition flex justify-center items-center gap-2 shadow-lg shadow-teal-600/20 active:scale-[0.98] text-sm"
+                >
+                  <Banknote size={18} /> HIZLI ÖDEME
+                </button>
+              )}
+            </div>
           </div>
         )}
 
         {/* Patient List or Appointments */}
-        <div className="flex-1 overflow-y-auto">
+        <div
+          ref={listRef}
+          className="flex-1 overflow-y-auto"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          {/* Pull Indicator */}
+          <div
+            style={{ height: pullChange, opacity: pullChange > 0 ? 1 : 0 }}
+            className="flex items-center justify-center overflow-hidden transition-all duration-200 bg-gray-50 dark:bg-slate-800"
+          >
+            {isRefreshing ? (
+              <Loader2 className="animate-spin text-teal-600" size={24} />
+            ) : (
+              <RefreshCcw
+                className="text-gray-400"
+                size={24}
+                style={{ transform: `rotate(${pullChange * 2}deg)` }}
+              />
+            )}
+          </div>
           {activeTab === 'appointments' ? (
             <AppointmentsTab
               currentUser={currentUser}
@@ -1148,7 +1270,22 @@ export default function Home() {
             />
           ) : (
             <>
-              {filteredPatients.length === 0 ? (
+              {loading ? (
+                <div className="p-4 space-y-3">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="p-4 border-b rounded-lg bg-slate-800/20 dark:bg-slate-700/50 animate-pulse">
+                      <div className="space-y-3">
+                        <div className="w-1/2 h-5 bg-slate-200 dark:bg-slate-600 rounded"></div>
+                        <div className="w-1/3 h-3 bg-slate-200 dark:bg-slate-600 rounded"></div>
+                        <div className="flex gap-2">
+                          <div className="w-16 h-4 bg-slate-200 dark:bg-slate-600 rounded"></div>
+                          <div className="w-16 h-4 bg-slate-200 dark:bg-slate-600 rounded"></div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : filteredPatients.length === 0 ? (
                 <div className="text-center p-8 text-gray-400">
                   <p>Kayıt bulunamadı.</p>
                 </div>
@@ -1206,7 +1343,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* DETAIL PANEL */}
+      {/* DETAIL PANEL / MAIN CONTENT */}
       <div className="flex-1 bg-gray-50 flex flex-col h-full overflow-hidden relative pt-16 md:pt-0">
         {activeTab === 'dashboard' ? (
           <div className="h-full overflow-y-auto">
@@ -1215,13 +1352,147 @@ export default function Home() {
               treatments={treatments}
               doctors={users}
               currentUser={currentUser}
+              loading={loading}
             />
+          </div>
+        ) : isMobile && activeTab === 'appointments' ? (
+          <div className="h-full overflow-y-auto pb-24">
+            <AppointmentsTab
+              currentUser={currentUser}
+              patients={patients}
+              selectedDate={appointmentDate}
+              onDateChange={setAppointmentDate}
+              toast={toast}
+            />
+          </div>
+        ) : isMobile && activeTab === 'patients' && !activePatient ? (
+          // Mobile: Full-screen patient list
+          <div className="h-full overflow-y-auto pb-24">
+            <div className="p-4 bg-white border-b sticky top-16 md:top-0 z-10">
+              <div className="relative">
+                <Search className="absolute left-3 top-3 text-slate-500" size={18} />
+                <input
+                  type="text"
+                  placeholder={hasPermission.viewAllPatients(currentUser.role) ? "Tüm hastalarda ara..." : "Kendi hastalarında ara..."}
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-[#0e7490] text-slate-800 placeholder:text-slate-500 transition"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <button
+                onClick={handleNewPatientClick}
+                className="mt-3 w-full bg-[#0e7490] text-white py-3 rounded-xl font-bold hover:bg-[#155e75] transition flex justify-center items-center gap-2 shadow-lg active:scale-[0.98]"
+              >
+                <Plus size={18} /> YENİ HASTA EKLE
+              </button>
+            </div>
+
+            {filteredPatients.length === 0 ? (
+              <div className="text-center p-8 text-gray-400">Kayıt bulunamadı.</div>
+            ) : (
+              <ul className="divide-y">
+                {filteredPatients.map(p => (
+                  <li key={p.id} className="relative overflow-hidden">
+                    {/* Background actions */}
+                    <div className="absolute inset-0 flex items-center justify-between pointer-events-none">
+                      <div className="h-full w-1/2 bg-green-50 flex items-center pl-4 text-green-600">
+                        <Edit size={18} />
+                      </div>
+                      <div className="h-full w-1/2 bg-red-50 flex items-center justify-end pr-4 text-red-600">
+                        <Trash2 size={18} />
+                      </div>
+                    </div>
+
+                    <motion.div
+                      drag="x"
+                      dragConstraints={{ left: -80, right: 80 }}
+                      dragElastic={0.2}
+                      onDragEnd={(e, info) => {
+                        if (info.offset.x > 50) {
+                          // Edit
+                          if ((currentUser.role === 'admin' || currentUser.role === 'banko' || currentUser.role === 'asistan') ||
+                            (currentUser.role === 'doctor' && p.doctor_id === currentUser.id)) {
+                            setEditingPatient(p);
+                            setShowEditPatientModal(true);
+                          } else {
+                            toast({ type: 'error', message: 'Düzenleme yetkiniz yok.' });
+                          }
+                        }
+                        if (info.offset.x < -50) {
+                          // Delete
+                          if (hasPermission.deletePatient(currentUser.role) && (currentUser.role === 'admin' || p.doctor_id === currentUser.id)) {
+                            handleDeletePatient(p.id);
+                          } else {
+                            toast({ type: 'error', message: 'Silme yetkiniz yok.' });
+                          }
+                        }
+                      }}
+                      onClick={() => {
+                        setSelectedPatientId(p.id);
+                        setShowMobileSidebar(false);
+                      }}
+                      className={cn(
+                        "relative z-10 p-4 cursor-pointer bg-white hover:bg-teal-50 transition",
+                        selectedPatientId === p.id && 'bg-teal-50'
+                      )}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-semibold text-gray-800">{p.name}</h3>
+                          <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
+                            <Phone size={12} /> {p.phone || 'Tel yok'}
+                          </p>
+                          {hasPermission.viewAllPatients(currentUser.role) && (
+                            <div className="flex flex-wrap gap-1.5 mt-1.5">
+                              <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">
+                                Hekim: {p.doctor_name || 'Bilinmiyor'}
+                              </span>
+                              {p.assignment_type && (
+                                <span className={cn(
+                                  "text-[10px] px-1.5 py-0.5 rounded font-medium",
+                                  p.assignment_type === 'queue'
+                                    ? "bg-amber-100 text-amber-700"
+                                    : "bg-purple-100 text-purple-700"
+                                )}>
+                                  {p.assignment_type === 'queue' ? '🔄 Sıralı' : '⭐ Tercihli'}
+                                </span>
+                              )}
+                              {p.assignment_date && (
+                                <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+                                  📅 {new Date(p.assignment_date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          {p.updated_at && (
+                            <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full">
+                              {new Date(p.updated_at).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         ) : activePatient ? (
           <>
             {/* Patient Header */}
             <div className="bg-white p-4 md:p-6 shadow-sm border-b flex flex-col sm:flex-row justify-between items-start gap-4">
               <div className="flex-1">
+                {/* Back button for mobile */}
+                {isMobile && (
+                  <button
+                    onClick={() => setSelectedPatientId(null)}
+                    className="mb-2 inline-flex items-center gap-2 text-teal-700 font-medium md:hidden"
+                  >
+                    <ArrowLeft size={18} /> Geri
+                  </button>
+                )}
                 <h2 className="text-xl md:text-2xl font-bold text-gray-800 flex items-center gap-3">
                   {activePatient.name}
                 </h2>
@@ -1442,6 +1713,44 @@ export default function Home() {
         )}
       </div>
 
+      {/* Mobile Bottom Navigation */}
+      <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t shadow-sm">
+        <div className="flex">
+          <button
+            onClick={() => { setActiveTab('patients'); setShowMobileSidebar(false); }}
+            className={cn(
+              "flex-1 flex flex-col items-center justify-center py-3 text-xs font-medium",
+              activeTab === 'patients' ? 'text-teal-700' : 'text-gray-500'
+            )}
+          >
+            <Users size={20} />
+            <span>Hastalar</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('appointments'); setShowMobileSidebar(false); }}
+            className={cn(
+              "flex-1 flex flex-col items-center justify-center py-3 text-xs font-medium",
+              activeTab === 'appointments' ? 'text-teal-700' : 'text-gray-500'
+            )}
+          >
+            <Calendar size={20} />
+            <span>Randevu</span>
+          </button>
+          {hasPermission.viewDashboard(currentUser.role) && (
+            <button
+              onClick={() => { setActiveTab('dashboard'); setShowMobileSidebar(false); }}
+              className={cn(
+                "flex-1 flex flex-col items-center justify-center py-3 text-xs font-medium",
+                activeTab === 'dashboard' ? 'text-teal-700' : 'text-gray-500'
+              )}
+            >
+              <LayoutDashboard size={20} />
+              <span>Paneller</span>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* MODALS */}
       {/* Doctor Selection Modal (for BANKO/ASISTAN) */}
       {showDoctorSelectionModal && (
@@ -1583,8 +1892,13 @@ export default function Home() {
       )}
 
       {showAddPatientModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-5 md:p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 p-0 md:p-4 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="bg-white w-full h-[100dvh] md:h-auto md:max-w-md md:rounded-xl shadow-2xl p-5 md:p-6 overflow-y-auto"
+          >
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg md:text-xl font-bold text-gray-800">Yeni Hasta Kartı</h3>
               <button onClick={() => setShowAddPatientModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
@@ -1614,7 +1928,7 @@ export default function Home() {
               )}
               <button type="submit" disabled={loading} className="w-full bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 text-base disabled:opacity-50">{loading ? 'Kaydediyor...' : 'Kaydet'}</button>
             </form>
-          </div>
+          </motion.div>
         </div>
       )}
 
@@ -1648,8 +1962,13 @@ export default function Home() {
       )}
 
       {showPaymentModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-5 md:p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 p-0 md:p-4 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="bg-white w-full h-[100dvh] md:h-auto md:max-w-md md:rounded-xl shadow-2xl p-5 md:p-6 overflow-y-auto"
+          >
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg md:text-xl font-bold text-amber-800">Ödeme Ekle</h3>
               <button onClick={() => setShowPaymentModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
@@ -1724,14 +2043,19 @@ export default function Home() {
                 </button>
               </div>
             </form>
-          </div>
+          </motion.div>
         </div>
       )}
 
       {/* Password Change Modal */}
       {showChangePasswordModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6">
+        <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 p-0 md:p-4 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="bg-white w-full h-[100dvh] md:h-auto md:max-w-sm md:rounded-xl shadow-2xl p-6 overflow-y-auto"
+          >
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                 <Lock size={20} className="text-teal-600" />
@@ -1824,7 +2148,7 @@ export default function Home() {
                 </button>
               </div>
             </form>
-          </div>
+          </motion.div>
         </div>
       )}
 
@@ -1896,8 +2220,13 @@ export default function Home() {
       )}
 
       {showAddUserModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-5 md:p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 p-0 md:p-4 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="bg-white w-full h-[100dvh] md:h-auto md:max-w-lg md:rounded-xl shadow-2xl p-5 md:p-6 overflow-y-auto"
+          >
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg md:text-xl font-bold text-indigo-800">Hekim Yönetimi</h3>
               <button onClick={() => { setShowAddUserModal(false); }} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
@@ -1983,9 +2312,20 @@ export default function Home() {
                 ))}
               </div>
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
+
+      {/* Mobile Floating Action Button (FAB) */}
+      <div className="md:hidden fixed bottom-20 right-4 z-40 group">
+        <span className="absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-20 animate-ping group-hover:opacity-40"></span>
+        <button
+          onClick={handleNewPatientClick}
+          className="relative inline-flex items-center justify-center w-14 h-14 bg-[#cca43b] text-[#0f172a] rounded-full shadow-2xl hover:scale-110 transition-all duration-300 active:scale-95 border-2 border-[#b59030]"
+        >
+          <Plus size={28} strokeWidth={3} />
+        </button>
+      </div>
 
       <AIAssistant />
 

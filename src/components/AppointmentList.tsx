@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import {
     Calendar, Clock, User, Trash2, Edit, CheckCircle, XCircle,
-    AlertCircle, ChevronLeft, ChevronRight, Plus
+    AlertCircle, ChevronLeft, ChevronRight, Plus, List, LayoutGrid
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { AgendaView } from './AgendaView';
 import type { Appointment } from '@/hooks/useAppointments';
 
 interface AppointmentListProps {
@@ -37,6 +38,7 @@ export function AppointmentList({
     loading,
 }: AppointmentListProps) {
     const [expandedId, setExpandedId] = useState<string | null>(null);
+    const [viewMode, setViewMode] = useState<'list' | 'agenda'>('agenda');
 
     const goToPreviousDay = () => {
         const prev = new Date(selectedDate);
@@ -84,12 +86,30 @@ export function AppointmentList({
                         <Calendar size={20} className="text-[#0e7490]" />
                         Randevular
                     </h2>
-                    <button
-                        onClick={onAddNew}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-[#0e7490] text-white rounded-lg hover:bg-[#155e75] transition text-sm font-medium"
-                    >
-                        <Plus size={16} /> Yeni
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <div className="flex bg-gray-100 dark:bg-slate-700 rounded-lg p-1 mr-2">
+                            <button
+                                onClick={() => setViewMode('list')}
+                                className={`p-1.5 rounded-md transition ${viewMode === 'list' ? 'bg-white dark:bg-slate-600 shadow text-[#0e7490] dark:text-teal-400' : 'text-gray-400'}`}
+                                title="Liste Görünümü"
+                            >
+                                <List size={16} />
+                            </button>
+                            <button
+                                onClick={() => setViewMode('agenda')}
+                                className={`p-1.5 rounded-md transition ${viewMode === 'agenda' ? 'bg-white dark:bg-slate-600 shadow text-[#0e7490] dark:text-teal-400' : 'text-gray-400'}`}
+                                title="Ajanda Görünümü"
+                            >
+                                <LayoutGrid size={16} />
+                            </button>
+                        </div>
+                        <button
+                            onClick={onAddNew}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-[#0e7490] text-white rounded-lg hover:bg-[#155e75] transition text-sm font-medium"
+                        >
+                            <Plus size={16} /> Yeni
+                        </button>
+                    </div>
                 </div>
 
                 {/* Date Selector */}
@@ -122,11 +142,26 @@ export function AppointmentList({
                 </div>
             </div>
 
-            {/* Appointment List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {/* Appointment List or Agenda */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 h-full">
                 {loading ? (
-                    <div className="flex items-center justify-center py-12">
-                        <div className="w-8 h-8 border-2 border-teal-600 border-t-transparent rounded-full animate-spin" />
+                    <div className="space-y-3">
+                        {[1, 2, 3].map((i) => (
+                            <div key={i} className="bg-white dark:bg-slate-700 rounded-xl border dark:border-slate-600 shadow-sm overflow-hidden p-4 animate-pulse">
+                                <div className="flex items-center gap-3">
+                                    <div className="min-w-[60px] flex flex-col items-center gap-2">
+                                        <div className="w-12 h-6 bg-slate-200 dark:bg-slate-600 rounded"></div>
+                                        <div className="w-8 h-3 bg-slate-200 dark:bg-slate-600 rounded"></div>
+                                    </div>
+                                    <div className="w-px h-10 bg-gray-200 dark:bg-slate-500" />
+                                    <div className="flex-1 space-y-2">
+                                        <div className="w-3/4 h-5 bg-slate-200 dark:bg-slate-600 rounded"></div>
+                                        <div className="w-1/2 h-3 bg-slate-200 dark:bg-slate-600 rounded"></div>
+                                    </div>
+                                    <div className="w-16 h-6 bg-slate-200 dark:bg-slate-600 rounded-full"></div>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 ) : appointments.length === 0 ? (
                     <div className="text-center py-12 text-gray-400">
@@ -138,6 +173,14 @@ export function AppointmentList({
                         >
                             + Randevu Ekle
                         </button>
+                    </div>
+                ) : viewMode === 'agenda' ? (
+                    <div className="h-full">
+                        <AgendaView
+                            appointments={appointments}
+                            onEdit={onEdit}
+                            onStatusChange={onStatusChange}
+                        />
                     </div>
                 ) : (
                     <AnimatePresence>

@@ -100,12 +100,12 @@ export function AppointmentModal({
     return (
         <AnimatePresence>
             {isOpen && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+                <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 p-0 md:p-4 backdrop-blur-sm">
                     <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-md w-full p-6"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 20 }}
+                        className="bg-white dark:bg-slate-800 w-full h-[100dvh] md:h-auto md:max-w-md md:rounded-xl rounded-none shadow-2xl p-4 md:p-6 overflow-y-auto"
                     >
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
