@@ -101,6 +101,13 @@ const hasPermission = {
     role === 'admin',
 };
 
+const canDeletePatient = (user: Doctor | null, patient: Patient) => {
+  if (!user) return false;
+  if (user.role === 'admin' || user.role === 'banko' || user.role === 'asistan') return true;
+  if (user.role === 'doctor') return patient.doctor_id === user.id;
+  return false;
+};
+
 // --- INPUT HELPERS ---
 const sanitizePhoneNumber = (value: string) => value.replace(/\D/g, '').slice(0, 10);
 
@@ -124,6 +131,14 @@ const formatPhoneNumber = (value: string) => {
 const isValidPhoneNumber = (value: string) => {
   const digits = sanitizePhoneNumber(value);
   return digits.length === 10 && digits.startsWith('5');
+};
+
+const getLocalDateString = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 export default function Home() {
@@ -378,7 +393,7 @@ export default function Home() {
   // --- QUEUE MANAGEMENT ---
   const initializeQueue = async (): Promise<QueueData | null> => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
 
       // Check if today's queue already exists
       const { data: existingQueue, error: fetchError } = await supabase
@@ -437,6 +452,11 @@ export default function Home() {
       if (!queue) return null;
     }
 
+    if (!queue.queue_order || queue.queue_order.length === 0) {
+      queue = await initializeQueue();
+      if (!queue) return null;
+    }
+
     // Get the doctor at current index
     const doctorId = queue.queue_order[queue.current_index];
 
@@ -473,6 +493,12 @@ export default function Home() {
       initializeQueue();
     }
   }, [currentUser, users]);
+
+  useEffect(() => {
+    if (showDoctorSelectionModal && currentUser && (currentUser.role === 'banko' || currentUser.role === 'asistan')) {
+      initializeQueue();
+    }
+  }, [showDoctorSelectionModal, currentUser]);
 
   // Clear assignment tracking when switching away from patients tab
   useEffect(() => {
@@ -521,14 +547,17 @@ export default function Home() {
     setPullStart(0);
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const user = users.find((u: Doctor) => u.id === selectedLoginUser);
     if (user && user.pin === loginPin) {
       setCurrentUser(user);
       setLoginPin('');
       // Trigger fetch for this user
-      fetchData(user);
+      await fetchData(user);
+      if (user.role === 'banko' || user.role === 'asistan') {
+        await initializeQueue();
+      }
     } else {
       toast({ type: 'error', message: 'Hatalı PIN!' });
     }
@@ -777,7 +806,7 @@ export default function Home() {
 
           if (recentSameDoctor.length >= 1) {
             // Get current distribution for context
-            const today = new Date().toISOString().split('T')[0];
+            const today = getLocalDateString();
             const todaysPatients = patients.filter(p => p.assignment_date === today);
             const doctorStats: Record<string, number> = {};
 
@@ -818,7 +847,7 @@ export default function Home() {
         phone: cleanedPhone,
         anamnez: hasPermission.editAnamnez(currentUser.role) ? newPatient.anamnez : '',
         assignment_type: assignmentType,
-        assignment_date: new Date().toISOString().split('T')[0]
+        assignment_date: getLocalDateString()
       }).select();
 
       if (error) throw error;
@@ -1506,7 +1535,7 @@ export default function Home() {
                         }
                         if (info.offset.x < -50) {
                           // Delete
-                          if (hasPermission.deletePatient(currentUser.role) && (currentUser.role === 'admin' || p.doctor_id === currentUser.id)) {
+                          if (canDeletePatient(currentUser, p)) {
                             handleDeletePatient(p.id);
                           } else {
                             toast({ type: 'error', message: 'Silme yetkiniz yok.' });
@@ -1617,16 +1646,15 @@ export default function Home() {
                       <Edit size={20} />
                     </button>
                   )}
-                {hasPermission.deletePatient(currentUser.role) &&
-                  (currentUser.role === 'admin' || activePatient.doctor_id === currentUser.id) && (
-                    <button
-                      onClick={() => handleDeletePatient(activePatient.id)}
-                      className="text-gray-400 hover:text-red-500 transition p-2"
-                      title="Hastayı Sil"
-                    >
-                      <Trash2 size={20} />
-                    </button>
-                  )}
+                {canDeletePatient(currentUser, activePatient) && (
+                  <button
+                    onClick={() => handleDeletePatient(activePatient.id)}
+                    className="text-gray-400 hover:text-red-500 transition p-2"
+                    title="Hastayı Sil"
+                  >
+                    <Trash2 size={20} />
+                  </button>
+                )}
               </div>
             </div>
 
