@@ -101,6 +101,31 @@ const hasPermission = {
     role === 'admin',
 };
 
+// --- INPUT HELPERS ---
+const sanitizePhoneNumber = (value: string) => value.replace(/\D/g, '').slice(0, 10);
+
+const formatPhoneNumber = (value: string) => {
+  const digits = sanitizePhoneNumber(value);
+  if (!digits) return '';
+
+  const part1 = digits.slice(0, 3);
+  const part2 = digits.slice(3, 6);
+  const part3 = digits.slice(6, 8);
+  const part4 = digits.slice(8, 10);
+
+  return [
+    part1 ? `(${part1}${part1.length === 3 ? ')' : ''}` : '',
+    part2 ? ` ${part2}` : '',
+    part3 ? ` ${part3}` : '',
+    part4 ? ` ${part4}` : ''
+  ].join('');
+};
+
+const isValidPhoneNumber = (value: string) => {
+  const digits = sanitizePhoneNumber(value);
+  return digits.length === 10 && digits.startsWith('5');
+};
+
 export default function Home() {
   const { toast } = useToast();
 
@@ -169,6 +194,16 @@ export default function Home() {
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [newDoctor, setNewDoctor] = useState<{ name: string; pin: string; role: DoctorRole }>({ name: '', pin: '', role: 'doctor' });
   const [editingDoctorId, setEditingDoctorId] = useState<string | null>(null);
+
+  const canSaveNewPatient = useMemo(
+    () => newPatient.name.trim().length > 0 && isValidPhoneNumber(newPatient.phone),
+    [newPatient.name, newPatient.phone]
+  );
+
+  const canSaveEditedPatient = useMemo(
+    () => editingPatient ? editingPatient.name.trim().length > 0 && isValidPhoneNumber(editingPatient.phone || '') : false,
+    [editingPatient?.name, editingPatient?.phone]
+  );
 
   // Payment form state
   const [paymentForm, setPaymentForm] = useState({
@@ -596,54 +631,62 @@ export default function Home() {
     if (!newDoctor.name || !newDoctor.pin) return;
     setLoading(true);
 
-    if (editingDoctorId) {
-      const { error } = await supabase.from('doctors').update({
-        name: newDoctor.name,
-        pin: newDoctor.pin,
-        role: newDoctor.role || 'doctor'
-      }).eq('id', editingDoctorId);
-      if (error) toast({ type: 'error', message: 'Kullanıcı güncellenemedi. Lütfen tekrar deneyin.' });
-      else {
+    try {
+      if (editingDoctorId) {
+        const { error } = await supabase.from('doctors').update({
+          name: newDoctor.name,
+          pin: newDoctor.pin,
+          role: newDoctor.role || 'doctor'
+        }).eq('id', editingDoctorId);
+        if (error) throw error;
+
         setEditingDoctorId(null);
         setNewDoctor({ name: '', pin: '', role: 'doctor' });
         toast({ type: 'success', message: 'Kullanıcı güncellendi!' });
         const { data } = await supabase.from('doctors').select('*');
         if (data) setUsers(data);
-      }
-    } else {
-      const { error } = await supabase.from('doctors').insert({
-        name: newDoctor.name,
-        role: newDoctor.role || 'doctor',
-        pin: newDoctor.pin
-      });
-      if (error) toast({ type: 'error', message: 'Yeni kullanıcı eklenemedi. PIN zaten kullanımda olabilir.' });
-      else {
+      } else {
+        const { error } = await supabase.from('doctors').insert({
+          name: newDoctor.name,
+          role: newDoctor.role || 'doctor',
+          pin: newDoctor.pin
+        });
+        if (error) throw error;
+
         setNewDoctor({ name: '', pin: '', role: 'doctor' });
         toast({ type: 'success', message: 'Yeni kullanıcı eklendi!' });
         // Refresh doctors list manually since fetchData(currentUser) might not fetch doctors
         const { data } = await supabase.from('doctors').select('*');
         if (data) setUsers(data);
       }
+    } catch (error) {
+      console.error('Doctor save error:', error);
+      toast({ type: 'error', message: 'Kullanıcı kaydedilemedi. İnternet bağlantınızı kontrol edin.' });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleDeleteDoctor = async (id: string) => {
     if (!confirm('Hekimi sil?')) return;
     setLoading(true);
-    const { error } = await supabase.from('doctors').delete().eq('id', id);
-    if (error) toast({ type: 'error', message: 'Hekim silinemedi. Önce ilişkili kayıtları silin.' });
-    else {
+    try {
+      const { error } = await supabase.from('doctors').delete().eq('id', id);
+      if (error) throw error;
       toast({ type: 'success', message: 'Hekim silindi.' });
       fetchData();
+    } catch (error) {
+      console.error('Doctor delete error:', error);
+      toast({ type: 'error', message: 'Hekim silinemedi. İnternet veya ilişkili kayıtları kontrol edin.' });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   // Duplicate patient check helper
   const checkForDuplicatePatient = async (name: string, phone: string) => {
     const trimmedName = name.trim();
-    const trimmedPhone = phone.trim();
+    const trimmedPhone = sanitizePhoneNumber(phone);
 
     // Check for exact phone match
     if (trimmedPhone) {
@@ -676,114 +719,126 @@ export default function Home() {
     e.preventDefault();
     if (!currentUser) return;
 
-    // DUPLIKASYON KONTROLÜ - Check for duplicate patients
-    if (!proceedWithDuplicate) {
-      const duplicateCheck = await checkForDuplicatePatient(
-        newPatient.name,
-        newPatient.phone
-      );
+    const cleanedPhone = sanitizePhoneNumber(newPatient.phone);
+    const trimmedName = newPatient.name.trim();
 
-      if (duplicateCheck.hasDuplicate) {
-        setDuplicatePatients(duplicateCheck.duplicates);
-        setShowDuplicateWarning(true);
-        return;
-      }
+    if (!trimmedName || !isValidPhoneNumber(newPatient.phone)) {
+      toast({ type: 'error', message: 'Ad Soyad ve geçerli telefon zorunludur.' });
+      return;
     }
 
-    // Hekim ID belirleme
-    let doctorId = currentUser.id;
-    let doctorName = currentUser.name;
-    let assignmentType: 'queue' | 'preference' = 'preference'; // Default to preference
-
-    if (currentUser.role === 'banko' || currentUser.role === 'asistan') {
-      // Check if doctor was selected via the selection modal
-      if (!selectedDoctorForPatient) {
-        toast({ type: 'error', message: 'Lütfen hekim seçin' });
-        return;
-      }
-      doctorId = selectedDoctorForPatient;
-      const selectedDoc = users.find(u => u.id === selectedDoctorForPatient);
-      doctorName = selectedDoc?.name || '';
-
-      // Determine assignment type based on selection method
-      if (doctorSelectionMethod === 'queue') {
-        assignmentType = 'queue';
-      } else {
-        assignmentType = 'preference';
-      }
-    }
-
-    // Check for consecutive queue assignments
-    if (currentUser.role === 'banko' || currentUser.role === 'asistan') {
-      if (assignmentType === 'queue' && doctorSelectionMethod === 'queue') {
-        // Check last assignments
-        const recentSameDoctor = recentQueueAssignments.filter(
-          (assignment) =>
-            assignment.doctorId === doctorId &&
-            Date.now() - assignment.timestamp < 3600000 // Within last hour
+    try {
+      // DUPLIKASYON KONTROLÜ - Check for duplicate patients
+      if (!proceedWithDuplicate) {
+        const duplicateCheck = await checkForDuplicatePatient(
+          trimmedName,
+          cleanedPhone
         );
 
-        if (recentSameDoctor.length >= 1) {
-          // Get current distribution for context
-          const today = new Date().toISOString().split('T')[0];
-          const todaysPatients = patients.filter(p => p.assignment_date === today);
-          const doctorStats: Record<string, number> = {};
-
-          todaysPatients.forEach(p => {
-            if (p.assignment_type === 'queue') {
-              doctorStats[p.doctor_id] = (doctorStats[p.doctor_id] || 0) + 1;
-            }
-          });
-
-          const currentDoctorCount = (doctorStats[doctorId] || 0) + recentSameDoctor.length;
-          const otherCounts = Object.values(doctorStats).filter((_, idx) =>
-            Object.keys(doctorStats)[idx] !== doctorId
-          );
-          const avgOthers = otherCounts.length > 0
-            ? Math.round(otherCounts.reduce((a, b) => a + b, 0) / otherCounts.length)
-            : 0;
-
-          toast({
-            type: 'warning',
-            message: `⚠️ Dikkat: ${doctorName} hekime arka arkaya ${recentSameDoctor.length + 1}. hasta ekleniyor! (Bugün: ${currentDoctorCount + 1}, Diğer hekimler ort: ${avgOthers})`,
-            duration: 5000
-          });
+        if (duplicateCheck.hasDuplicate) {
+          setDuplicatePatients(duplicateCheck.duplicates);
+          setShowDuplicateWarning(true);
+          return;
         }
-
-        // Track this assignment
-        setRecentQueueAssignments(prev => [
-          ...prev.slice(-4), // Keep last 5 assignments
-          { doctorId, doctorName, timestamp: Date.now() }
-        ]);
       }
-    }
 
-    setLoading(true);
-    const { data, error } = await supabase.from('patients').insert({
-      doctor_id: doctorId,
-      doctor_name: doctorName,
-      name: newPatient.name,
-      phone: newPatient.phone,
-      anamnez: hasPermission.editAnamnez(currentUser.role) ? newPatient.anamnez : '',
-      assignment_type: assignmentType,
-      assignment_date: new Date().toISOString().split('T')[0]
-    }).select();
+      // Hekim ID belirleme
+      let doctorId = currentUser.id;
+      let doctorName = currentUser.name;
+      let assignmentType: 'queue' | 'preference' = 'preference'; // Default to preference
 
-    if (error) toast({ type: 'error', message: 'Hasta eklenemedi. Lütfen tüm bilgileri kontrol edin.' });
-    else {
+      if (currentUser.role === 'banko' || currentUser.role === 'asistan') {
+        // Check if doctor was selected via the selection modal
+        if (!selectedDoctorForPatient) {
+          toast({ type: 'error', message: 'Lütfen hekim seçin' });
+          return;
+        }
+        doctorId = selectedDoctorForPatient;
+        const selectedDoc = users.find(u => u.id === selectedDoctorForPatient);
+        doctorName = selectedDoc?.name || '';
+
+        // Determine assignment type based on selection method
+        if (doctorSelectionMethod === 'queue') {
+          assignmentType = 'queue';
+        } else {
+          assignmentType = 'preference';
+        }
+      }
+
+      // Check for consecutive queue assignments
+      if (currentUser.role === 'banko' || currentUser.role === 'asistan') {
+        if (assignmentType === 'queue' && doctorSelectionMethod === 'queue') {
+          // Check last assignments
+          const recentSameDoctor = recentQueueAssignments.filter(
+            (assignment) =>
+              assignment.doctorId === doctorId &&
+              Date.now() - assignment.timestamp < 3600000 // Within last hour
+          );
+
+          if (recentSameDoctor.length >= 1) {
+            // Get current distribution for context
+            const today = new Date().toISOString().split('T')[0];
+            const todaysPatients = patients.filter(p => p.assignment_date === today);
+            const doctorStats: Record<string, number> = {};
+
+            todaysPatients.forEach(p => {
+              if (p.assignment_type === 'queue') {
+                doctorStats[p.doctor_id] = (doctorStats[p.doctor_id] || 0) + 1;
+              }
+            });
+
+            const currentDoctorCount = (doctorStats[doctorId] || 0) + recentSameDoctor.length;
+            const otherCounts = Object.values(doctorStats).filter((_, idx) =>
+              Object.keys(doctorStats)[idx] !== doctorId
+            );
+            const avgOthers = otherCounts.length > 0
+              ? Math.round(otherCounts.reduce((a, b) => a + b, 0) / otherCounts.length)
+              : 0;
+
+            toast({
+              type: 'warning',
+              message: `⚠️ Dikkat: ${doctorName} hekime arka arkaya ${recentSameDoctor.length + 1}. hasta ekleniyor! (Bugün: ${currentDoctorCount + 1}, Diğer hekimler ort: ${avgOthers})`,
+              duration: 5000
+            });
+          }
+
+          // Track this assignment
+          setRecentQueueAssignments(prev => [
+            ...prev.slice(-4), // Keep last 5 assignments
+            { doctorId, doctorName, timestamp: Date.now() }
+          ]);
+        }
+      }
+
+      setLoading(true);
+      const { data, error } = await supabase.from('patients').insert({
+        doctor_id: doctorId,
+        doctor_name: doctorName,
+        name: trimmedName,
+        phone: cleanedPhone,
+        anamnez: hasPermission.editAnamnez(currentUser.role) ? newPatient.anamnez : '',
+        assignment_type: assignmentType,
+        assignment_date: new Date().toISOString().split('T')[0]
+      }).select();
+
+      if (error) throw error;
+
       setNewPatient({ name: '', phone: '', anamnez: '' });
       setSelectedDoctorForPatient('');
       setDoctorSelectionMethod(null);
       setShowAddPatientModal(false);
       if (data && data[0]) setSelectedPatientId(data[0].id);
-      toast({ type: 'success', message: 'Yeni hasta eklendi!' });
+      toast({ type: 'success', message: 'Hasta kartı başarıyla kaydedildi.' });
       fetchData();
+    } catch (error) {
+      console.error('Patient add error:', error);
+      toast({ type: 'error', message: 'Kayıt yapılamadı. İnternet bağlantınızı kontrol edin.' });
+    } finally {
+      setLoading(false);
+      // Reset duplicate flags
+      setProceedWithDuplicate(false);
+      setDuplicatePatients([]);
     }
-    setLoading(false);
-
-    // Reset duplicate flags
-    setProceedWithDuplicate(false);
-    setDuplicatePatients([]);
   };
 
   const handleDoctorSelectionConfirm = async () => {
@@ -815,42 +870,62 @@ export default function Home() {
     }
   };
 
+  const openPatientEditor = (patient: Patient) => {
+    setEditingPatient({ ...patient, phone: formatPhoneNumber(patient.phone || '') });
+    setShowEditPatientModal(true);
+  };
+
   const handleDeletePatient = async (id: string) => {
     if (!confirm('Silmek istediğine emin misin?')) return;
     setLoading(true);
-    const { error } = await supabase.from('patients').delete().eq('id', id);
-    if (error) toast({ type: 'error', message: error.message });
-    else {
+    try {
+      const { error } = await supabase.from('patients').delete().eq('id', id);
+      if (error) throw error;
       if (selectedPatientId === id) setSelectedPatientId(null);
       toast({ type: 'success', message: 'Hasta silindi.' });
       fetchData();
+    } catch (error) {
+      console.error('Patient delete error:', error);
+      toast({ type: 'error', message: 'Hasta silinemedi. İnternet bağlantınızı kontrol edin.' });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleEditPatient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser || !editingPatient) return;
 
-    setLoading(true);
-    const { error } = await supabase
-      .from('patients')
-      .update({
-        name: editingPatient.name,
-        phone: editingPatient.phone,
-        anamnez: hasPermission.editAnamnez(currentUser.role) ? editingPatient.anamnez : editingPatient.anamnez
-      })
-      .eq('id', editingPatient.id);
+    const cleanedPhone = sanitizePhoneNumber(editingPatient.phone || '');
 
-    if (error) {
-      toast({ type: 'error', message: error.message });
-    } else {
+    if (!isValidPhoneNumber(editingPatient.phone || '')) {
+      toast({ type: 'error', message: 'Geçerli bir telefon numarası girin.' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('patients')
+        .update({
+          name: editingPatient.name.trim(),
+          phone: cleanedPhone,
+          anamnez: hasPermission.editAnamnez(currentUser.role) ? editingPatient.anamnez : editingPatient.anamnez
+        })
+        .eq('id', editingPatient.id);
+
+      if (error) throw error;
+
       setShowEditPatientModal(false);
       setEditingPatient(null);
       toast({ type: 'success', message: 'Hasta bilgileri güncellendi!' });
       fetchData();
+    } catch (error) {
+      console.error('Edit patient error:', error);
+      toast({ type: 'error', message: 'Güncelleme başarısız. İnternet bağlantınızı kontrol edin.' });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   // Treatment form now handled by TreatmentForm component
@@ -858,13 +933,17 @@ export default function Home() {
   const handleDeleteTreatment = async (id: string) => {
     if (!confirm('Sil?')) return;
     setLoading(true);
-    const { error } = await supabase.from('treatments').delete().eq('id', id);
-    if (error) toast({ type: 'error', message: error.message });
-    else {
+    try {
+      const { error } = await supabase.from('treatments').delete().eq('id', id);
+      if (error) throw error;
       toast({ type: 'success', message: 'İşlem silindi.' });
       fetchData();
+    } catch (error) {
+      console.error('Treatment delete error:', error);
+      toast({ type: 'error', message: 'İşlem silinemedi. İnternet bağlantınızı kontrol edin.' });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleMarkAsCompleted = async (treatmentId: string) => {
@@ -872,22 +951,25 @@ export default function Home() {
 
     setLoading(true);
 
-    const { error } = await supabase
-      .from('treatments')
-      .update({
-        status: 'completed',
-        completed_date: new Date().toISOString()
-      })
-      .eq('id', treatmentId);
+    try {
+      const { error } = await supabase
+        .from('treatments')
+        .update({
+          status: 'completed',
+          completed_date: new Date().toISOString()
+        })
+        .eq('id', treatmentId);
 
-    if (error) {
-      toast({ type: 'error', message: 'Güncelleme hatası: ' + error.message });
-    } else {
+      if (error) throw error;
+
       toast({ type: 'success', message: 'Tedavi tamamlandı olarak işaretlendi!' });
       fetchData();
+    } catch (error) {
+      console.error('Treatment complete error:', error);
+      toast({ type: 'error', message: 'Güncelleme hatası. İnternet bağlantınızı kontrol edin.' });
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handleAddPayment = async (e: React.FormEvent) => {
@@ -898,28 +980,32 @@ export default function Home() {
     }
 
     setLoading(true);
-    const { error } = await supabase.from('treatments').insert({
-      patient_id: paymentForm.patient_id,
-      tooth_no: '', // Boş = ödeme kaydı
-      procedure: `ÖDEME - ${paymentForm.payment_status === 'paid' ? 'Tam Ödendi' : 'Kısmi Ödeme'}`,
-      cost: paymentForm.payment_amount,
-      notes: paymentForm.payment_note || '',
-      added_by: currentUser.name,
-      payment_status: 'paid',
-      payment_amount: paymentForm.payment_amount,
-      payment_note: paymentForm.payment_note
-    });
+    try {
+      const { error } = await supabase.from('treatments').insert({
+        patient_id: paymentForm.patient_id,
+        tooth_no: '', // Boş = ödeme kaydı
+        procedure: `ÖDEME - ${paymentForm.payment_status === 'paid' ? 'Tam Ödendi' : 'Kısmi Ödeme'}`,
+        cost: paymentForm.payment_amount,
+        notes: paymentForm.payment_note || '',
+        added_by: currentUser.name,
+        payment_status: 'paid',
+        payment_amount: paymentForm.payment_amount,
+        payment_note: paymentForm.payment_note
+      });
 
-    if (error) {
-      toast({ type: 'error', message: error.message });
-    } else {
+      if (error) throw error;
+
       toast({ type: 'success', message: 'Ödeme kaydedildi!' });
       setShowPaymentModal(false);
       setPaymentForm({ patient_id: '', payment_amount: 0, payment_status: 'paid', payment_note: '' });
       await supabase.from('patients').update({ updated_at: new Date().toISOString() }).eq('id', paymentForm.patient_id);
       fetchData();
+    } catch (error) {
+      console.error('Payment add error:', error);
+      toast({ type: 'error', message: 'Ödeme kaydedilemedi. İnternet bağlantınızı kontrol edin.' });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleQuickPaymentSubmit = async (treatmentId: string, amount: number, method: string) => {
@@ -949,15 +1035,16 @@ export default function Home() {
       // payment_date: new Date().toISOString() // Uncomment if column exists
     };
 
-    const { error } = await supabase.from('treatments').update(updates).eq('id', treatmentId);
+    try {
+      const { error } = await supabase.from('treatments').update(updates).eq('id', treatmentId);
 
-    if (error) {
-      console.error("Payment Error:", error);
-      toast({ type: 'error', message: 'Ödeme kaydedilemedi' });
-      throw error;
-    } else {
+      if (error) throw error;
+
       toast({ type: 'success', message: 'Ödeme alındı' });
       fetchData(); // Refresh data
+    } catch (error) {
+      console.error("Payment Error:", error);
+      toast({ type: 'error', message: 'Ödeme kaydedilemedi. İnternet bağlantınızı kontrol edin.' });
     }
   };
 
@@ -1035,7 +1122,7 @@ export default function Home() {
               />
             </div>
 
-            <button disabled={loading} type="submit" className="w-full bg-[#0e7490] text-white py-4 rounded-xl font-bold hover:bg-[#155e75] transition-all shadow-lg hover:shadow-[#0e7490]/25 disabled:opacity-70 disabled:cursor-not-allowed mt-4 active:scale-[0.98]">
+            <button disabled={loading} type="submit" className="touch-target w-full bg-[#0e7490] text-white py-4 rounded-xl font-bold hover:bg-[#155e75] transition-all shadow-lg hover:shadow-[#0e7490]/25 disabled:opacity-70 disabled:cursor-not-allowed mt-4 active:scale-[0.98]">
               {loading ? 'Yükleniyor...' : 'Giriş Yap'}
             </button>
           </form>
@@ -1221,14 +1308,14 @@ export default function Home() {
             <div className="flex gap-2">
               <button
                 onClick={handleNewPatientClick}
-                className="flex-1 bg-[#cca43b] text-[#0f172a] py-2.5 rounded-xl font-bold hover:bg-[#b59030] transition flex justify-center items-center gap-2 shadow-lg shadow-[#cca43b]/20 active:scale-[0.98] text-sm"
+                className="touch-target flex-1 bg-[#cca43b] text-[#0f172a] py-2.5 rounded-xl font-bold hover:bg-[#b59030] transition flex justify-center items-center gap-2 shadow-lg shadow-[#cca43b]/20 active:scale-[0.98] text-sm"
               >
                 <Plus size={18} /> YENİ HASTA
               </button>
               {hasPermission.addPayment(currentUser.role) && (
                 <button
                   onClick={() => setShowPaymentQuickAccess(true)}
-                  className="flex-1 bg-teal-600 text-white py-2.5 rounded-xl font-bold hover:bg-teal-700 transition flex justify-center items-center gap-2 shadow-lg shadow-teal-600/20 active:scale-[0.98] text-sm"
+                  className="touch-target flex-1 bg-teal-600 text-white py-2.5 rounded-xl font-bold hover:bg-teal-700 transition flex justify-center items-center gap-2 shadow-lg shadow-teal-600/20 active:scale-[0.98] text-sm"
                 >
                   <Banknote size={18} /> HIZLI ÖDEME
                 </button>
@@ -1301,7 +1388,7 @@ export default function Home() {
                         <div>
                           <h3 className="font-semibold text-gray-800 dark:text-gray-100">{p.name}</h3>
                           <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-1">
-                            <Phone size={12} /> {p.phone || 'Tel yok'}
+                            <Phone size={12} /> {formatPhoneNumber(p.phone || '') || 'Tel yok'}
                           </p>
                           {hasPermission.viewAllPatients(currentUser.role) && (
                             <div className="flex flex-wrap gap-1.5 mt-1.5">
@@ -1381,7 +1468,7 @@ export default function Home() {
               </div>
               <button
                 onClick={handleNewPatientClick}
-                className="mt-3 w-full bg-[#0e7490] text-white py-3 rounded-xl font-bold hover:bg-[#155e75] transition flex justify-center items-center gap-2 shadow-lg active:scale-[0.98]"
+                className="touch-target mt-3 w-full bg-[#0e7490] text-white py-3 rounded-xl font-bold hover:bg-[#155e75] transition flex justify-center items-center gap-2 shadow-lg active:scale-[0.98]"
               >
                 <Plus size={18} /> YENİ HASTA EKLE
               </button>
@@ -1412,8 +1499,7 @@ export default function Home() {
                           // Edit
                           if ((currentUser.role === 'admin' || currentUser.role === 'banko' || currentUser.role === 'asistan') ||
                             (currentUser.role === 'doctor' && p.doctor_id === currentUser.id)) {
-                            setEditingPatient(p);
-                            setShowEditPatientModal(true);
+                            openPatientEditor(p);
                           } else {
                             toast({ type: 'error', message: 'Düzenleme yetkiniz yok.' });
                           }
@@ -1440,7 +1526,7 @@ export default function Home() {
                         <div>
                           <h3 className="font-semibold text-gray-800">{p.name}</h3>
                           <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
-                            <Phone size={12} /> {p.phone || 'Tel yok'}
+                            <Phone size={12} /> {formatPhoneNumber(p.phone || '') || 'Tel yok'}
                           </p>
                           {hasPermission.viewAllPatients(currentUser.role) && (
                             <div className="flex flex-wrap gap-1.5 mt-1.5">
@@ -1498,7 +1584,7 @@ export default function Home() {
                 </h2>
                 <div className="flex flex-wrap gap-2 md:gap-4 mt-2 text-xs md:text-sm text-gray-600">
                   <span className="flex items-center gap-1 bg-gray-100 px-2 md:px-3 py-1 rounded-full">
-                    <Phone size={14} /> {activePatient.phone}
+                    <Phone size={14} /> {formatPhoneNumber(activePatient.phone || '') || 'Tel yok'}
                   </span>
                   <span className="flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 md:px-3 py-1 rounded-full">
                     <User size={14} /> Sorumlu: {activePatient.doctor_name}
@@ -1910,7 +1996,8 @@ export default function Home() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Telefon</label>
-                <input type="tel" placeholder="Telefon" className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none" value={newPatient.phone} onChange={e => setNewPatient({ ...newPatient, phone: e.target.value })} />
+                <input type="tel" placeholder="(5XX) XXX XX XX" required className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none" value={newPatient.phone} onChange={e => setNewPatient({ ...newPatient, phone: formatPhoneNumber(e.target.value) })} />
+                <p className="text-xs text-gray-500 mt-1">Sadece 5 ile başlayan 10 haneli numara kabul edilir.</p>
               </div>
               {(currentUser.role === 'banko' || currentUser.role === 'asistan') && selectedDoctorForPatient && (
                 <div>
@@ -1926,7 +2013,7 @@ export default function Home() {
                   <textarea placeholder="Anamnez..." className="w-full p-3 border border-red-200 bg-red-50 rounded-lg text-base focus:ring-2 focus:ring-red-300 outline-none" rows={3} value={newPatient.anamnez} onChange={e => setNewPatient({ ...newPatient, anamnez: e.target.value })}></textarea>
                 </div>
               )}
-              <button type="submit" disabled={loading} className="w-full bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 text-base disabled:opacity-50">{loading ? 'Kaydediyor...' : 'Kaydet'}</button>
+              <button type="submit" disabled={loading || !canSaveNewPatient || ((currentUser.role === 'banko' || currentUser.role === 'asistan') && !selectedDoctorForPatient)} className="w-full bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 text-base disabled:opacity-50 disabled:cursor-not-allowed">{loading ? 'Kaydediyor...' : 'Kaydet'}</button>
             </form>
           </motion.div>
         </div>
@@ -1946,7 +2033,8 @@ export default function Home() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Telefon</label>
-                <input type="tel" placeholder="Telefon" className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none" value={editingPatient.phone || ''} onChange={e => setEditingPatient({ ...editingPatient, phone: e.target.value })} />
+                <input type="tel" placeholder="(5XX) XXX XX XX" required className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none" value={editingPatient.phone || ''} onChange={e => setEditingPatient({ ...editingPatient, phone: formatPhoneNumber(e.target.value) })} />
+                <p className="text-xs text-gray-500 mt-1">Numara eksikse kaydetme butonu kapanır.</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Anamnez</label>
@@ -1954,7 +2042,7 @@ export default function Home() {
               </div>
               <div className="flex gap-2">
                 <button type="button" onClick={() => { setShowEditPatientModal(false); setEditingPatient(null); }} className="flex-1 py-3 border rounded-lg font-medium hover:bg-gray-50 text-base">İptal</button>
-                <button type="submit" disabled={loading} className="flex-1 bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 text-base disabled:opacity-50">{loading ? 'Kaydediliyor...' : 'Güncelle'}</button>
+                <button type="submit" disabled={loading || !canSaveEditedPatient} className="flex-1 bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 text-base disabled:opacity-50 disabled:cursor-not-allowed">{loading ? 'Kaydediliyor...' : 'Güncelle'}</button>
               </div>
             </form>
           </div>

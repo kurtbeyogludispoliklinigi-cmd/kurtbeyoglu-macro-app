@@ -48,6 +48,8 @@ export function AppointmentModal({
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const isPastDate = date ? new Date(date).getTime() < Date.now() : false;
+
     // Reset form when modal opens or existingAppointment changes
     useEffect(() => {
         if (isOpen) {
@@ -73,6 +75,11 @@ export function AppointmentModal({
         e.preventDefault();
         if (!patientId || !date) {
             setError('Hasta ve tarih seçimi zorunludur.');
+            return;
+        }
+
+        if (isPastDate) {
+            setError('Geçmiş tarih seçilemez.');
             return;
         }
 
@@ -157,8 +164,12 @@ export function AppointmentModal({
                                     value={date}
                                     onChange={(e) => setDate(e.target.value)}
                                     required
+                                    min={new Date().toISOString().slice(0, 16)}
                                     className="w-full p-3 border rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:ring-2 focus:ring-teal-500 outline-none"
                                 />
+                                {isPastDate && (
+                                    <p className="text-xs text-red-500 mt-1">Geçmiş tarih için kayıt oluşturulamaz.</p>
+                                )}
                             </div>
 
                             {/* Duration */}
@@ -218,14 +229,14 @@ export function AppointmentModal({
                                 <button
                                     type="button"
                                     onClick={onClose}
-                                    className="flex-1 py-3 px-4 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600 transition font-medium"
+                                    className="touch-target flex-1 py-3 px-4 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600 transition font-medium"
                                 >
                                     İptal
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={loading}
-                                    className="flex-1 py-3 px-4 bg-[#0e7490] text-white rounded-lg hover:bg-[#155e75] transition font-bold disabled:opacity-50"
+                                    disabled={loading || !patientId || !date || isPastDate}
+                                    className="touch-target flex-1 py-3 px-4 bg-[#0e7490] text-white rounded-lg hover:bg-[#155e75] transition font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {loading ? '...' : existingAppointment ? 'Güncelle' : 'Kaydet'}
                                 </button>

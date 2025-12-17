@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { X, Search, CreditCard, Banknote, Building2, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useToast } from '@/hooks/useToast';
 
 // Types reuse
 interface Treatment {
@@ -36,6 +37,7 @@ export function PaymentQuickAccess({
     patients,
     onPaymentSubmit
 }: PaymentQuickAccessProps) {
+    const { toast } = useToast();
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedTreatmentId, setSelectedTreatmentId] = useState<string | null>(null);
     const [amount, setAmount] = useState('');
@@ -66,9 +68,10 @@ export function PaymentQuickAccess({
             await onPaymentSubmit(selectedTreatmentId, Number(amount), method);
             setSelectedTreatmentId(null);
             setAmount('');
+            toast({ type: 'success', message: 'Ödeme bilgisi kaydedildi.' });
         } catch (error) {
             console.error(error);
-            alert('Ödeme alınırken hata oluştu.');
+            toast({ type: 'error', message: 'Ödeme alınırken hata oluştu. Bağlantınızı kontrol edin.' });
         } finally {
             setLoading(false);
         }

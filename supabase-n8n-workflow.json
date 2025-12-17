@@ -1,0 +1,210 @@
+{
+  "name": "Supabase Appointment WhatsApp",
+  "nodes": [
+    {
+      "parameters": {
+        "event": "INSERT",
+        "schema": "public",
+        "table": "appointments"
+      },
+      "id": "Supabase Trigger",
+      "name": "Supabase Trigger",
+      "type": "n8n-nodes-base.supabaseTrigger",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CONNECTION_ID",
+          "name": "Supabase Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const raw = $json.new.phone || '';\nconst digits = raw.replace(/\\D/g, '').slice(-10);\nreturn [{\n  ...$json,\n  sanitizedPhone: digits,\n  isPhoneValid: digits.length === 10 && digits.startsWith('5'),\n  displayPhone: digits ? `(5${digits.slice(1,3)}) ${digits.slice(3,6)} ${digits.slice(6,8)} ${digits.slice(8,10)}` : ''\n}];"
+      },
+      "id": "Format Phone",
+      "name": "Format Phone",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [],
+          "string": [],
+          "number": [
+            {
+              "value1": "={{$json[\"isPhoneValid\"] ? 1 : 0}}",
+              "operation": "equal",
+              "value2": 1
+            }
+          ]
+        }
+      },
+      "id": "Is Phone Valid",
+      "name": "Is Phone Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://graph.facebook.com/v17.0/WHATSAPP_PHONE_ID/messages",
+        "options": {
+          "bodyContentType": "json"
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "messaging_product",
+              "value": "whatsapp"
+            },
+            {
+              "name": "to",
+              "value": "={{'90' + $json.sanitizedPhone}}"
+            },
+            {
+              "name": "type",
+              "value": "template"
+            },
+            {
+              "name": "template[name]",
+              "value": "appointment_alert"
+            },
+            {
+              "name": "template[language][code]",
+              "value": "tr"
+            },
+            {
+              "name": "template[components][0][type]",
+              "value": "body"
+            },
+            {
+              "name": "template[components][0][parameters][0][type]",
+              "value": "text"
+            },
+            {
+              "name": "template[components][0][parameters][0][text]",
+              "value": "={{$json.new.name || 'Hastanız'}}"
+            },
+            {
+              "name": "template[components][0][parameters][1][type]",
+              "value": "text"
+            },
+            {
+              "name": "template[components][0][parameters][1][text]",
+              "value": "={{$json.new.appointment_date}}"
+            }
+          ]
+        }
+      },
+      "id": "Send WhatsApp",
+      "name": "Send WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [900, 220]
+    },
+    {
+      "parameters": {
+        "mode": "keepKeyMatches",
+        "options": {}
+      },
+      "id": "Skip Invalid",
+      "name": "Skip Invalid",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [900, 380]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  status: $json.isPhoneValid ? 'sent' : 'skipped',\n  sanitizedPhone: $json.sanitizedPhone,\n  message: $json.isPhoneValid ? 'Mesaj kuyruğa alındı' : 'Telefon formatı uygun olmadığı için gönderim atlandı'\n}];"
+      },
+      "id": "Log Result",
+      "name": "Log Result",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1100, 300]
+    }
+  ],
+  "connections": {
+    "Supabase Trigger": {
+      "main": [
+        [
+          {
+            "node": "Format Phone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Phone": {
+      "main": [
+        [
+          {
+            "node": "Is Phone Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Phone Valid": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip Invalid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Log Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Invalid": {
+      "main": [
+        [
+          {
+            "node": "Log Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -126,3 +126,18 @@ body {
 .border-input {
   border-color: var(--input-border);
 }
+
+/* Mobile friendly base sizes */
+input, select, textarea {
+  min-height: 52px;
+  border-radius: 14px;
+  font-size: 16px;
+}
+
+.touch-target {
+  min-height: 52px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 16px;
+}
