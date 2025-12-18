@@ -50,8 +50,8 @@ export default function Home() {
   const [currentUser, setCurrentUser] = useState<Doctor | null>(null);
 
   // Dependent Hooks
-  const { patients, setPatients, refreshPatients } = usePatients(currentUser);
-  const { treatments, setTreatments, refreshTreatments } = useTreatments(currentUser, patients);
+  const { patients, setPatients, refreshPatients, addPatient, updatePatient, deletePatient, checkDuplicate } = usePatients(currentUser);
+  const { treatments, setTreatments, refreshTreatments, deleteTreatment, updateTreatment } = useTreatments(currentUser, patients);
   const { queueData, initializeQueue, getNextDoctor, getNextDoctorInQueue } = useQueue(currentUser, users);
 
 
@@ -466,37 +466,7 @@ export default function Home() {
     }
   };
 
-  // Duplicate patient check helper
-  const checkForDuplicatePatient = async (name: string, phone: string) => {
-    const trimmedName = name.trim();
-    const trimmedPhone = sanitizePhoneNumber(phone);
 
-    // Check for exact phone match
-    if (trimmedPhone) {
-      const { data: phoneMatches } = await supabase
-        .from('patients')
-        .select('*')
-        .eq('phone', trimmedPhone);
-
-      if (phoneMatches && phoneMatches.length > 0) {
-        return { hasDuplicate: true, duplicates: phoneMatches };
-      }
-    }
-
-    // Check for similar names
-    if (trimmedName) {
-      const { data: nameMatches } = await supabase
-        .from('patients')
-        .select('*')
-        .ilike('name', `%${trimmedName}%`);
-
-      if (nameMatches && nameMatches.length > 0) {
-        return { hasDuplicate: true, duplicates: nameMatches };
-      }
-    }
-
-    return { hasDuplicate: false, duplicates: [] };
-  };
 
   const handleAddPatient = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -513,10 +483,7 @@ export default function Home() {
     try {
       // DUPLIKASYON KONTROLÜ - Check for duplicate patients
       if (!proceedWithDuplicate) {
-        const duplicateCheck = await checkForDuplicatePatient(
-          trimmedName,
-          cleanedPhone
-        );
+        const duplicateCheck = await checkDuplicate(trimmedName, cleanedPhone);
 
         if (duplicateCheck.hasDuplicate) {
           setDuplicatePatients(duplicateCheck.duplicates);
@@ -594,7 +561,7 @@ export default function Home() {
       }
 
       setLoading(true);
-      const { data, error } = await supabase.from('patients').insert({
+      const { data, error } = await addPatient({
         doctor_id: doctorId,
         doctor_name: doctorName,
         name: trimmedName,
@@ -602,7 +569,9 @@ export default function Home() {
         anamnez: hasPermission.editAnamnez(currentUser.role) ? newPatient.anamnez : '',
         assignment_type: assignmentType,
         assignment_date: getLocalDateString()
-      }).select();
+      });
+
+      if (error) throw error;
 
       if (error) throw error;
 
@@ -662,18 +631,12 @@ export default function Home() {
 
   const handleDeletePatient = async (id: string) => {
     if (!confirm('Silmek istediğine emin misin?')) return;
-    setLoading(true);
-    try {
-      const { error } = await supabase.from('patients').delete().eq('id', id);
-      if (error) throw error;
-      if (selectedPatientId === id) setSelectedPatientId(null);
+    const { error } = await deletePatient(id);
+    if (!error) {
       toast({ type: 'success', message: 'Hasta silindi.' });
-      fetchData();
-    } catch (error) {
-      console.error('Patient delete error:', error);
-      toast({ type: 'error', message: 'Hasta silinemedi. İnternet bağlantınızı kontrol edin.' });
-    } finally {
-      setLoading(false);
+      if (selectedPatientId === id) setSelectedPatientId(null);
+    } else {
+      toast({ type: 'error', message: 'Hasta silinemedi.' });
     }
   };
 
@@ -682,34 +645,23 @@ export default function Home() {
     if (!currentUser || !editingPatient) return;
 
     const cleanedPhone = sanitizePhoneNumber(editingPatient.phone || '');
-
     if (!isValidPhoneNumber(editingPatient.phone || '')) {
       toast({ type: 'error', message: 'Geçerli bir telefon numarası girin.' });
       return;
     }
 
-    setLoading(true);
-    try {
-      const { error } = await supabase
-        .from('patients')
-        .update({
-          name: editingPatient.name.trim(),
-          phone: cleanedPhone,
-          anamnez: hasPermission.editAnamnez(currentUser.role) ? editingPatient.anamnez : editingPatient.anamnez
-        })
-        .eq('id', editingPatient.id);
+    const { error } = await updatePatient(editingPatient.id, {
+      name: editingPatient.name.trim(),
+      phone: cleanedPhone,
+      anamnez: hasPermission.editAnamnez(currentUser.role) ? editingPatient.anamnez : editingPatient.anamnez
+    });
 
-      if (error) throw error;
-
+    if (!error) {
       setShowEditPatientModal(false);
       setEditingPatient(null);
       toast({ type: 'success', message: 'Hasta bilgileri güncellendi!' });
-      fetchData();
-    } catch (error) {
-      console.error('Edit patient error:', error);
-      toast({ type: 'error', message: 'Güncelleme başarısız. İnternet bağlantınızı kontrol edin.' });
-    } finally {
-      setLoading(false);
+    } else {
+      toast({ type: 'error', message: 'Güncelleme başarısız.' });
     }
   };
 
@@ -717,45 +669,26 @@ export default function Home() {
 
   const handleDeleteTreatment = async (id: string) => {
     if (!confirm('Sil?')) return;
-    setLoading(true);
-    try {
-      const { error } = await supabase.from('treatments').delete().eq('id', id);
-      if (error) throw error;
+    const { error } = await deleteTreatment(id);
+    if (!error) {
       toast({ type: 'success', message: 'İşlem silindi.' });
-      fetchData();
-    } catch (error) {
-      console.error('Treatment delete error:', error);
-      toast({ type: 'error', message: 'İşlem silinemedi. İnternet bağlantınızı kontrol edin.' });
-    } finally {
-      setLoading(false);
+    } else {
+      toast({ type: 'error', message: 'İşlem silinemedi.' });
     }
   };
 
   const handleMarkAsCompleted = async (treatmentId: string) => {
     if (!confirm('Bu tedaviyi yapıldı olarak işaretlemek istediğinize emin misiniz?')) return;
+    const { error } = await updateTreatment(treatmentId, {
+      status: 'completed',
+      completed_date: new Date().toISOString()
+    });
 
-    setLoading(true);
-
-    try {
-      const { error } = await supabase
-        .from('treatments')
-        .update({
-          status: 'completed',
-          completed_date: new Date().toISOString()
-        })
-        .eq('id', treatmentId);
-
-      if (error) throw error;
-
+    if (!error) {
       toast({ type: 'success', message: 'Tedavi tamamlandı olarak işaretlendi!' });
-      fetchData();
-    } catch (error) {
-      console.error('Treatment complete error:', error);
-      toast({ type: 'error', message: 'Güncelleme hatası. İnternet bağlantınızı kontrol edin.' });
-    } finally {
-      setLoading(false);
     }
   };
+
 
 
   const handleAddPayment = async (e: React.FormEvent) => {

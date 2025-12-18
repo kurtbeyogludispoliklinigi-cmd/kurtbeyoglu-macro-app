@@ -66,11 +66,45 @@ export function useTreatments(currentUser: Doctor | null, patients: Patient[]) {
         };
     }, [currentUser, fetchTreatments]);
 
+    const deleteTreatment = useCallback(async (id: string) => {
+        setLoading(true);
+        try {
+            const { error } = await supabase.from('treatments').delete().eq('id', id);
+            if (error) throw error;
+            return { error: null };
+        } catch (err: any) {
+            console.error('Treatment delete error:', err);
+            return { error: err };
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    const updateTreatment = useCallback(async (id: string, updates: Partial<Treatment>) => {
+        setLoading(true);
+        try {
+            const { error } = await supabase
+                .from('treatments')
+                .update(updates)
+                .eq('id', id);
+
+            if (error) throw error;
+            return { error: null };
+        } catch (err: any) {
+            console.error('Treatment update error:', err);
+            return { error: err };
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
     return {
         treatments,
         setTreatments,
         loading,
         error,
-        refreshTreatments: fetchTreatments
+        refreshTreatments: fetchTreatments,
+        deleteTreatment,
+        updateTreatment
     };
 }

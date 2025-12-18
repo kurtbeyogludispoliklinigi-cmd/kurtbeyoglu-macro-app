@@ -63,11 +63,88 @@ export function usePatients(currentUser: Doctor | null) {
         };
     }, [currentUser, fetchPatients]);
 
+    const checkDuplicate = useCallback(async (name: string, phone: string): Promise<{ hasDuplicate: boolean; duplicates: Patient[] }> => {
+        const { data, error } = await supabase
+            .from('patients')
+            .select('*')
+            .or(`name.ilike.%${name}%,phone.eq.${phone}`);
+
+        if (error) {
+            console.error('Duplicate check error:', error);
+            return { hasDuplicate: false, duplicates: [] };
+        }
+
+        if (data && data.length > 0) {
+            return { hasDuplicate: true, duplicates: data };
+        }
+
+        return { hasDuplicate: false, duplicates: [] };
+    }, []);
+
+    const addPatient = useCallback(async (patientData: Partial<Patient>) => {
+        setLoading(true);
+        try {
+            const { data, error } = await supabase
+                .from('patients')
+                .insert(patientData)
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            // Optimistic update or wait for subscription? 
+            // Subscription will handle it, but for immediate UI feedback we might want data.
+            // setPatients(prev => [data, ...prev]); 
+            return { data, error: null };
+        } catch (err: any) {
+            console.error('Patient add error:', err);
+            return { data: null, error: err };
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    const updatePatient = useCallback(async (id: string, updates: Partial<Patient>) => {
+        setLoading(true);
+        try {
+            const { error } = await supabase
+                .from('patients')
+                .update(updates)
+                .eq('id', id);
+
+            if (error) throw error;
+            return { error: null };
+        } catch (err: any) {
+            console.error('Patient update error:', err);
+            return { error: err };
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    const deletePatient = useCallback(async (id: string) => {
+        setLoading(true);
+        try {
+            const { error } = await supabase.from('patients').delete().eq('id', id);
+            if (error) throw error;
+            return { error: null };
+        } catch (err: any) {
+            console.error('Patient delete error:', err);
+            return { error: err };
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
     return {
         patients,
-        setPatients, // Exposed for optimistic updates if needed
+        setPatients,
         loading,
         error,
-        refreshPatients: fetchPatients
+        refreshPatients: fetchPatients,
+        addPatient,
+        updatePatient,
+        deletePatient,
+        checkDuplicate
     };
 }
