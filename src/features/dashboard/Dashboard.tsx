@@ -12,6 +12,8 @@ import {
 import { motion } from 'framer-motion';
 import { ExportButtons } from '@/components/ReportExport';
 import { DailyAgenda } from './DailyAgenda';
+import { QuickPaymentWidget } from './QuickPaymentWidget';
+import { PaymentQuickAccess } from '@/features/payments/PaymentQuickAccess';
 import { supabase } from '@/lib/supabase';
 
 type DoctorRole = 'admin' | 'doctor' | 'banko' | 'asistan';
@@ -95,6 +97,7 @@ const ChartSkeleton = () => (
 export default function Dashboard({ patients, treatments, doctors, currentUser, loading = false }: DashboardProps) {
     const [queueData, setQueueData] = useState<QueueData | null>(null);
     const [loadingQueue, setLoadingQueue] = useState(false);
+    const [showQuickPay, setShowQuickPay] = useState(false);
 
     // Fetch today's queue data
     useEffect(() => {
@@ -421,12 +424,15 @@ export default function Dashboard({ patients, treatments, doctors, currentUser, 
 
             {/* Daily Agenda & Quick Actions Area */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-1">
+                <div className="lg:col-span-1 h-full">
                     <DailyAgenda currentUser={currentUser} />
                 </div>
-                {/* Placeholder for future widgets or maybe move charts here? */}
-                <div className="lg:col-span-2 hidden lg:block">
-                    {/* We can potentially move the chart here later, but for now let's keep it simple or leave empty/hidden */}
+                <div className="lg:col-span-1 h-full">
+                    <QuickPaymentWidget
+                        currentUser={currentUser}
+                        onOpen={() => setShowQuickPay(true)}
+                        totalPending={stats.pendingAmount}
+                    />
                 </div>
             </div>
 
@@ -740,6 +746,16 @@ export default function Dashboard({ patients, treatments, doctors, currentUser, 
                 </p>
                 <ExportButtons treatments={filteredTreatments} patients={filteredPatients} type="income" />
             </div>
+
+            <PaymentQuickAccess
+                isOpen={showQuickPay}
+                onClose={() => setShowQuickPay(false)}
+                treatments={treatments}
+                patients={patients}
+                onSuccess={() => {
+                    setShowQuickPay(false);
+                }}
+            />
         </div>
     );
 }
