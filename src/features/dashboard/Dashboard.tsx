@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { ExportButtons } from '@/components/ReportExport';
+import { DailyAgenda } from './DailyAgenda';
 import { supabase } from '@/lib/supabase';
 
 type DoctorRole = 'admin' | 'doctor' | 'banko' | 'asistan';
@@ -417,6 +418,17 @@ export default function Dashboard({ patients, treatments, doctors, currentUser, 
                     value={`${stats.totalRevenue.toLocaleString('tr-TR')} ₺`}
                 />
             </motion.div>
+
+            {/* Daily Agenda & Quick Actions Area */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-1">
+                    <DailyAgenda currentUser={currentUser} />
+                </div>
+                {/* Placeholder for future widgets or maybe move charts here? */}
+                <div className="lg:col-span-2 hidden lg:block">
+                    {/* We can potentially move the chart here later, but for now let's keep it simple or leave empty/hidden */}
+                </div>
+            </div>
 
             {/* Daily Doctor Distribution - Admin Only */}
             {currentUser.role === 'admin' && (
