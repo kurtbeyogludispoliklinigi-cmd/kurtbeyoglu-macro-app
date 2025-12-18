@@ -27,11 +27,6 @@ export function TreatmentForm({
   loading,
   setLoading
 }: TreatmentFormProps) {
-  // Null check for selectedPatientId
-  if (!selectedPatientId) {
-    return null;
-  }
-
   // Treatment catalog integration
   const {
     lookupTreatment,
@@ -68,6 +63,9 @@ export function TreatmentForm({
 
   // Debounced treatment lookup
   useEffect(() => {
+    // Skip if no patient selected (though component usually returns null late, good safety)
+    if (!selectedPatientId) return;
+
     if (!formData.procedure || formData.procedure.length < 3) {
       setPriceSuggestion({ isNew: true, standardPrice: null });
       setShowNewTreatmentWarning(false);
@@ -99,7 +97,7 @@ export function TreatmentForm({
     }, 500); // 500ms debounce
 
     return () => clearTimeout(timer);
-  }, [formData.procedure, lookupTreatment]);
+  }, [formData.procedure, formData.cost, lookupTreatment, selectedPatientId]);
 
   // Calculate discount info
   const discountInfo = useMemo(() => {
@@ -112,6 +110,11 @@ export function TreatmentForm({
 
     return calculateDiscount(standardPrice, paidAmount);
   }, [priceSuggestion.standardPrice, formData.cost, calculateDiscount]);
+
+  // Null check for selectedPatientId - MOVED AFTER HOOKS
+  if (!selectedPatientId) {
+    return null;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -144,7 +147,20 @@ export function TreatmentForm({
       }
 
       // Prepare treatment data with status fields
-      const treatmentData: any = {
+      interface TreatmentData {
+        patient_id: string;
+        tooth_no: string;
+        procedure: string;
+        cost: number;
+        notes: string;
+        added_by: string;
+        status: 'planned' | 'completed';
+        planned_date?: string;
+        planned_by?: string;
+        completed_date?: string;
+      }
+
+      const treatmentData: TreatmentData = {
         patient_id: selectedPatientId,
         tooth_no: formData.toothNo,
         procedure: formData.procedure,
@@ -203,8 +219,8 @@ export function TreatmentForm({
           type="button"
           onClick={() => setTreatmentMode('completed')}
           className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${treatmentMode === 'completed'
-              ? 'bg-[#0e7490] text-white shadow'
-              : 'bg-white text-gray-600 hover:bg-gray-100'
+            ? 'bg-[#0e7490] text-white shadow'
+            : 'bg-white text-gray-600 hover:bg-gray-100'
             }`}
         >
           ✓ Yapılan İşlem
@@ -213,8 +229,8 @@ export function TreatmentForm({
           type="button"
           onClick={() => setTreatmentMode('planned')}
           className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${treatmentMode === 'planned'
-              ? 'bg-blue-600 text-white shadow'
-              : 'bg-white text-gray-600 hover:bg-gray-100'
+            ? 'bg-blue-600 text-white shadow'
+            : 'bg-white text-gray-600 hover:bg-gray-100'
             }`}
         >
           📅 Planlanan İşlem
@@ -266,8 +282,8 @@ export function TreatmentForm({
               required
               list="treatment-suggestions"
               className={`w-full px-4 py-3 border rounded-lg focus:ring-2 outline-none transition-colors ${priceSuggestion.isNew
-                  ? 'border-yellow-300 focus:ring-yellow-500 bg-yellow-50'
-                  : 'border-green-300 focus:ring-green-500 bg-green-50'
+                ? 'border-yellow-300 focus:ring-yellow-500 bg-yellow-50'
+                : 'border-green-300 focus:ring-green-500 bg-green-50'
                 }`}
               value={formData.procedure}
               onChange={(e) =>
@@ -323,8 +339,8 @@ export function TreatmentForm({
           Number(formData.cost) !== priceSuggestion.standardPrice && (
             <div
               className={`text-sm p-3 rounded-lg ${discountInfo
-                  ? 'text-orange-700 bg-orange-50 border border-orange-200'
-                  : 'text-blue-700 bg-blue-50 border border-blue-200'
+                ? 'text-orange-700 bg-orange-50 border border-orange-200'
+                : 'text-blue-700 bg-blue-50 border border-blue-200'
                 }`}
             >
               <div className="flex items-center justify-between">

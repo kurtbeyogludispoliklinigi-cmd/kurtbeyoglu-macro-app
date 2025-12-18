@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { X, Search, CreditCard, Banknote, Building2, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '@/hooks/useToast';
+import { supabase } from '@/lib/supabase';
 
 // Types reuse
 interface Treatment {
@@ -27,7 +28,7 @@ interface PaymentQuickAccessProps {
     onClose: () => void;
     treatments: Treatment[];
     patients: Patient[];
-    onPaymentSubmit: (treatmentId: string, amount: number, method: string) => Promise<void>;
+    onSuccess: () => void; // Trigger refresh
 }
 
 export function PaymentQuickAccess({
@@ -35,7 +36,7 @@ export function PaymentQuickAccess({
     onClose,
     treatments,
     patients,
-    onPaymentSubmit
+    onSuccess
 }: PaymentQuickAccessProps) {
     const { toast } = useToast();
     const [searchTerm, setSearchTerm] = useState('');
@@ -59,16 +60,48 @@ export function PaymentQuickAccess({
         });
     }, [treatments, patients, searchTerm]);
 
+    const handlePaymentSubmit = async (treatmentId: string, paymentAmount: number, paymentMethod: string) => {
+        const treatment = treatments.find(t => t.id === treatmentId);
+        if (!treatment) return;
+
+        const currentPaid = treatment.payment_amount || 0;
+        const totalPaid = currentPaid + paymentAmount;
+        const remaining = (treatment.cost || 0) - totalPaid;
+
+        // Status update logic
+        const status = remaining <= 0.1 ? 'paid' : 'partial';
+
+        // Determine method label
+        const methodLabel = paymentMethod === 'cash' ? 'Nakit' : paymentMethod === 'credit_card' ? 'KK' : 'Havale';
+        const dateStr = new Date().toLocaleDateString('tr-TR');
+
+        const note = treatment.payment_note
+            ? `${treatment.payment_note}\n- ${paymentAmount}₺ ${methodLabel} (${dateStr})`
+            : `- ${paymentAmount}₺ ${methodLabel} (${dateStr})`;
+
+        const updates = {
+            payment_amount: totalPaid,
+            payment_status: status,
+            payment_note: note,
+        };
+
+        const { error } = await supabase.from('treatments').update(updates).eq('id', treatmentId);
+        if (error) throw error;
+    };
+
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedTreatmentId) return;
 
         setLoading(true);
         try {
-            await onPaymentSubmit(selectedTreatmentId, Number(amount), method);
+            await handlePaymentSubmit(selectedTreatmentId, Number(amount), method);
+
             setSelectedTreatmentId(null);
             setAmount('');
             toast({ type: 'success', message: 'Ödeme bilgisi kaydedildi.' });
+            onSuccess(); // Refresh data
         } catch (error) {
             console.error(error);
             toast({ type: 'error', message: 'Ödeme alınırken hata oluştu. Bağlantınızı kontrol edin.' });
@@ -147,7 +180,7 @@ export function PaymentQuickAccess({
                                         </div>
                                         <div className="text-right">
                                             <div className="text-lg font-bold text-teal-600 dark:text-teal-400">
-                                                {remaining.toLocaleString('tr-TR')} ₺
+                                                {remaining.toLocaleString('tr-TR') || '0'} ₺
                                             </div>
                                             <div className="text-xs text-gray-400">
                                                 Toplam: {t.cost} ₺
@@ -172,6 +205,7 @@ export function PaymentQuickAccess({
                                                             onChange={(e) => setAmount(e.target.value)}
                                                             max={remaining}
                                                             className="w-full p-2 border rounded-lg"
+                                                            step="0.01"
                                                         />
                                                     </div>
 

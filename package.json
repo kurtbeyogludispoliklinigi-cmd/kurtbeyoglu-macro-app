@@ -1,6 +1,8 @@
 {
-  "name": "temp_app",
-  "version": "0.1.0",
+  "name": "kurtbeyoglu-clinic-app",
+  "version": "2.0.0",
+  "description": "Kurtbeyoğlu Diş Kliniği Yönetim Sistemi - Hasta takip, randevu ve tedavi yönetimi",
+  "author": "Kurtbeyoğlu Kliniği",
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",

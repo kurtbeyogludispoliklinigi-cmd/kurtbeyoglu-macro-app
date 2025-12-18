@@ -10,7 +10,7 @@ import {
     Wallet, ClipboardList, Download, RotateCcw
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { ExportButtons } from './ReportExport';
+import { ExportButtons } from '@/components/ReportExport';
 import { supabase } from '@/lib/supabase';
 
 type DoctorRole = 'admin' | 'doctor' | 'banko' | 'asistan';

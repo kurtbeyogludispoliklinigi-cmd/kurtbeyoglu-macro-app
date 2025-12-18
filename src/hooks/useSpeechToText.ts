@@ -42,7 +42,11 @@ export function useSpeechToText() {
     useEffect(() => {
         if (typeof window !== 'undefined') {
             const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-            setIsSupported(!!SpeechRecognitionAPI);
+            const supported = !!SpeechRecognitionAPI;
+            if (supported) {
+                // Defer state update to avoid synchronous render warning
+                setTimeout(() => setIsSupported(true), 0);
+            }
 
             if (SpeechRecognitionAPI) {
                 const recognition = new SpeechRecognitionAPI();

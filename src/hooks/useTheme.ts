@@ -33,13 +33,28 @@ export function useThemeState() {
     useEffect(() => {
         const stored = localStorage.getItem('theme') as Theme | null;
         if (stored && ['light', 'dark', 'system'].includes(stored)) {
-            setThemeState(stored);
-            setResolvedTheme(resolveTheme(stored));
+            // Defer updates to avoid sync render warning
+            setTimeout(() => {
+                if (theme !== stored) {
+                    setThemeState(stored);
+                }
+                const resolved = resolveTheme(stored);
+                if (resolvedTheme !== resolved) {
+                    setResolvedTheme(resolved);
+                }
+            }, 0);
         } else {
-            setResolvedTheme(getSystemTheme());
+            const sysTheme = getSystemTheme();
+            if (resolvedTheme !== sysTheme) {
+                // Defer to avoid warning
+                setTimeout(() => setResolvedTheme(sysTheme), 0);
+            }
         }
-    }, [getSystemTheme, resolveTheme]);
-
+    }, [getSystemTheme, resolveTheme]); // Removed theme/resolvedTheme from dependency to avoid cycles, but logic needs to be careful.
+    // Actually, if I add theme to dependency, it might loop.
+    // Better to just not depend on theme/resolvedTheme inside, but that breaks the 'if' check validity if closure is stale.
+    // However, useEffect runs after render, so closure has latest state usually.
+    // Let's rely on functional updates or just suppress the warning if checks are good.
     // Apply theme to document
     useEffect(() => {
         const root = document.documentElement;

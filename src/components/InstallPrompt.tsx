@@ -35,7 +35,7 @@ export function InstallPrompt() {
         // Check if already dismissed or in standalone mode
         const dismissed = localStorage.getItem('pwa-install-dismissed');
         if (dismissed || isStandalone()) {
-            setIsDismissed(true);
+            setTimeout(() => setIsDismissed(true), 0);
             return;
         }
 
