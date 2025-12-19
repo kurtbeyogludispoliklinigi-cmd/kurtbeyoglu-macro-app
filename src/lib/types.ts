@@ -27,6 +27,8 @@ export interface Patient {
     assignment_type?: 'queue' | 'preference';
     assignment_date?: string;
     treatments?: Treatment[];
+    created_by?: string;
+    created_by_name?: string;
 }
 
 export interface Treatment {
@@ -45,6 +47,15 @@ export interface Treatment {
     planned_date?: string | null;
     completed_date?: string | null;
     planned_by?: string | null;
+}
+
+export interface Payment {
+    id: string;
+    patient_id: string;
+    amount: number;
+    note?: string;
+    date: string;
+    added_by: string;
 }
 
 // --- QUEUE DATA ---

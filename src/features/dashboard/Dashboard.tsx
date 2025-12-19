@@ -15,6 +15,8 @@ import { DailyAgenda } from './DailyAgenda';
 import { QuickPaymentWidget } from './QuickPaymentWidget';
 import { PaymentQuickAccess } from '@/features/payments/PaymentQuickAccess';
 import { supabase } from '@/lib/supabase';
+import { ActivityMonitor } from './ActivityMonitor';
+import { CommandCenter } from './CommandCenter';
 
 type DoctorRole = 'admin' | 'doctor' | 'banko' | 'asistan';
 type PaymentStatus = 'pending' | 'paid' | 'partial';
@@ -59,6 +61,7 @@ interface DashboardProps {
     doctors: Doctor[];
     currentUser: Doctor;
     loading?: boolean;
+    onSelectPatient?: (patientId: string) => void;
 }
 
 interface QueueData {
@@ -719,6 +722,11 @@ export default function Dashboard({ patients, treatments, doctors, currentUser, 
                 )}
             </div>
 
+            {/* Admin Activity Monitor */}
+            {currentUser.role === 'admin' && (
+                <ActivityMonitor currentUser={currentUser} />
+            )}
+
             {/* Monthly Revenue Card */}
             <div className="bg-gradient-to-r from-teal-500 to-emerald-500 rounded-xl p-4 md:p-6 text-white shadow-lg">
                 <div className="flex justify-between items-start">
@@ -756,6 +764,7 @@ export default function Dashboard({ patients, treatments, doctors, currentUser, 
                     setShowQuickPay(false);
                 }}
             />
+
         </div>
     );
 }

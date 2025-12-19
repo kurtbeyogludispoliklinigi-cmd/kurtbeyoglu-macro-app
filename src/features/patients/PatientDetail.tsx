@@ -8,7 +8,10 @@ import { hasPermission, canDeletePatient } from '@/lib/permissions';
 import { PatientReportButton } from '@/components/ReportExport';
 import { PatientImageGallery } from '@/components/PatientImageGallery';
 import { TreatmentForm } from '@/features/treatments';
+
 import { useToast } from '@/hooks/useToast';
+import { PatientTimeline } from './PatientTimeline';
+import { LayoutList, GitCommit } from 'lucide-react';
 
 interface PatientDetailProps {
     patient: Patient;
@@ -41,6 +44,7 @@ export function PatientDetail({
 }: PatientDetailProps) {
     const { toast } = useToast();
     const [treatmentFilter, setTreatmentFilter] = useState<'all' | 'planned' | 'completed'>('all');
+    const [viewMode, setViewMode] = useState<'list' | 'timeline'>('timeline');
 
     return (
         <>
@@ -164,95 +168,122 @@ export function PatientDetail({
                     })}
                 </div>
 
-                <h3 className="text-lg font-semibold text-gray-700 mb-4 px-1">Tedavi Geçmişi</h3>
-                {!patient.treatments || patient.treatments.length === 0 ? (
-                    <div className="text-center py-10 bg-white rounded-xl border border-dashed">
-                        <p className="text-gray-400">Henüz işlem kaydı yok.</p>
+                <div className="flex justify-between items-center mb-4 px-1">
+                    <h3 className="text-lg font-semibold text-gray-700">Tedavi Geçmişi</h3>
+
+                    <div className="flex bg-gray-100 p-1 rounded-lg">
+                        <button
+                            onClick={() => setViewMode('list')}
+                            className={cn("p-1.5 rounded-md transition", viewMode === 'list' ? "bg-white shadow text-teal-600" : "text-gray-400 hover:text-gray-600")}
+                            title="Liste Görünümü"
+                        >
+                            <LayoutList size={18} />
+                        </button>
+                        <button
+                            onClick={() => setViewMode('timeline')}
+                            className={cn("p-1.5 rounded-md transition", viewMode === 'timeline' ? "bg-white shadow text-teal-600" : "text-gray-400 hover:text-gray-600")}
+                            title="Zaman Çizelgesi"
+                        >
+                            <GitCommit size={18} />
+                        </button>
                     </div>
-                ) : (
-                    <div className="space-y-4">
-                        {patient.treatments
-                            .filter(t => treatmentFilter === 'all' || t.status === treatmentFilter)
-                            .map((t) => (
-                                <div
-                                    key={t.id}
-                                    className={cn(
-                                        "p-4 rounded-xl border shadow-sm hover:shadow-md transition relative group",
-                                        t.status === 'planned' ? "bg-blue-50 border-blue-200" :
-                                            t.status === 'completed' ? "bg-white" : "bg-gray-50 border-gray-300"
-                                    )}
-                                >
-                                    {/* Status Badge */}
-                                    <div className="absolute top-3 right-3">
-                                        {t.status === 'planned' && (
-                                            <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full font-medium">
-                                                📅 Planlanan
-                                            </span>
-                                        )}
-                                        {t.status === 'completed' && (
-                                            <span className="bg-teal-100 text-teal-700 text-xs px-2 py-1 rounded-full font-medium">
-                                                ✅ Yapıldı
-                                            </span>
-                                        )}
-                                        {t.status === 'cancelled' && (
-                                            <span className="bg-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full font-medium">
-                                                ✕ İptal
-                                            </span>
-                                        )}
-                                    </div>
+                </div>
 
-                                    <div className="flex justify-between items-start mb-2 pr-24">
-                                        <div className="flex gap-3 items-center">
-                                            {t.tooth_no && (
-                                                <div className="bg-blue-50 text-blue-700 font-bold px-3 py-1 rounded-md border border-blue-100">
-                                                    #{t.tooth_no}
-                                                </div>
+                {/* TIMELINE VIEW */}
+                {viewMode === 'timeline' && (
+                    <PatientTimeline treatments={patient.treatments?.filter(t => treatmentFilter === 'all' || t.status === treatmentFilter) || []} />
+                )}
+
+                {/* LIST VIEW */}
+                {viewMode === 'list' && (
+                    !patient.treatments || patient.treatments.length === 0 ? (
+                        <div className="text-center py-10 bg-white rounded-xl border border-dashed">
+                            <p className="text-gray-400">Henüz işlem kaydı yok.</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {patient.treatments
+                                .filter(t => treatmentFilter === 'all' || t.status === treatmentFilter)
+                                .map((t) => (
+                                    <div
+                                        key={t.id}
+                                        className={cn(
+                                            "p-4 rounded-xl border shadow-sm hover:shadow-md transition relative group",
+                                            t.status === 'planned' ? "bg-blue-50 border-blue-200" :
+                                                t.status === 'completed' ? "bg-white" : "bg-gray-50 border-gray-300"
+                                        )}
+                                    >
+                                        {/* Status Badge */}
+                                        <div className="absolute top-3 right-3">
+                                            {t.status === 'planned' && (
+                                                <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full font-medium">
+                                                    📅 Planlanan
+                                                </span>
                                             )}
-                                            <h4 className="font-bold text-gray-800 text-lg">{t.procedure}</h4>
+                                            {t.status === 'completed' && (
+                                                <span className="bg-teal-100 text-teal-700 text-xs px-2 py-1 rounded-full font-medium">
+                                                    ✅ Yapıldı
+                                                </span>
+                                            )}
+                                            {t.status === 'cancelled' && (
+                                                <span className="bg-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full font-medium">
+                                                    ✕ İptal
+                                                </span>
+                                            )}
                                         </div>
-                                        <div className="text-right">
-                                            <div className="text-xs text-gray-400 flex items-center gap-1 justify-end">
-                                                <Clock size={12} /> {new Date(t.created_at).toLocaleDateString()}
+
+                                        <div className="flex justify-between items-start mb-2 pr-24">
+                                            <div className="flex gap-3 items-center">
+                                                {t.tooth_no && (
+                                                    <div className="bg-blue-50 text-blue-700 font-bold px-3 py-1 rounded-md border border-blue-100">
+                                                        #{t.tooth_no}
+                                                    </div>
+                                                )}
+                                                <h4 className="font-bold text-gray-800 text-lg">{t.procedure}</h4>
                                             </div>
-                                            {t.cost && <div className="text-teal-600 font-bold mt-1">{t.cost} ₺</div>}
+                                            <div className="text-right">
+                                                <div className="text-xs text-gray-400 flex items-center gap-1 justify-end">
+                                                    <Clock size={12} /> {new Date(t.created_at).toLocaleDateString()}
+                                                </div>
+                                                {t.cost && <div className="text-teal-600 font-bold mt-1">{t.cost} ₺</div>}
+                                            </div>
                                         </div>
-                                    </div>
-                                    {t.notes && <p className="text-gray-600 text-sm mt-2 bg-gray-50 p-2 rounded block">{t.notes}</p>}
+                                        {t.notes && <p className="text-gray-600 text-sm mt-2 bg-gray-50 p-2 rounded block">{t.notes}</p>}
 
-                                    {t.planned_by && (
-                                        <p className="text-xs text-gray-500 mt-2">
-                                            Planlayan: {t.planned_by}
-                                        </p>
-                                    )}
-
-                                    {/* Action Buttons */}
-                                    <div className="absolute bottom-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition">
-                                        {t.status === 'planned' && hasPermission.addTreatment(currentUser.role) && (
-                                            <button
-                                                onClick={() => onMarkTreatmentCompleted(t.id)}
-                                                className="bg-teal-600 text-white px-3 py-1 rounded text-xs hover:bg-teal-700 font-medium"
-                                                title="Yapıldı Olarak İşaretle"
-                                            >
-                                                ✓ Yapıldı
-                                            </button>
+                                        {t.planned_by && (
+                                            <p className="text-xs text-gray-500 mt-2">
+                                                Planlayan: {t.planned_by}
+                                            </p>
                                         )}
 
-                                        {(hasPermission.addTreatment(currentUser.role) &&
-                                            ((currentUser.role === 'admin' || currentUser.role === 'asistan') ||
-                                                (currentUser.role === 'doctor' && patient.doctor_id === currentUser.id))) && (
+                                        {/* Action Buttons */}
+                                        <div className="absolute bottom-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition">
+                                            {t.status === 'planned' && hasPermission.addTreatment(currentUser.role) && (
                                                 <button
-                                                    onClick={() => onDeleteTreatment(t.id)}
-                                                    className="text-gray-300 hover:text-red-500 transition"
-                                                    title="Sil"
+                                                    onClick={() => onMarkTreatmentCompleted(t.id)}
+                                                    className="bg-teal-600 text-white px-3 py-1 rounded text-xs hover:bg-teal-700 font-medium"
+                                                    title="Yapıldı Olarak İşaretle"
                                                 >
-                                                    <Trash2 size={16} />
+                                                    ✓ Yapıldı
                                                 </button>
                                             )}
+
+                                            {(hasPermission.addTreatment(currentUser.role) &&
+                                                ((currentUser.role === 'admin' || currentUser.role === 'asistan') ||
+                                                    (currentUser.role === 'doctor' && patient.doctor_id === currentUser.id))) && (
+                                                    <button
+                                                        onClick={() => onDeleteTreatment(t.id)}
+                                                        className="text-gray-300 hover:text-red-500 transition"
+                                                        title="Sil"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
-                    </div>
-                )}
+                                ))}
+                        </div>
+                    ))}
             </div>
         </>
     );

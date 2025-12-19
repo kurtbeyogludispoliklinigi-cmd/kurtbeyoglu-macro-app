@@ -4,7 +4,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Plus } from 'lucide-react';
 import { useTreatmentCatalog } from '@/hooks/useTreatmentCatalog';
 import { VoiceInput } from '@/components/VoiceInput';
+
 import { supabase } from '@/lib/supabase';
+import { useActivityLogger } from '@/hooks/useActivityLogger';
+import { Doctor } from '@/lib/types';
+import { Odontogram } from '@/components/Odontogram';
+import { Grid } from 'lucide-react';
 
 interface TreatmentFormProps {
   currentUser: {
@@ -59,7 +64,10 @@ export function TreatmentForm({
     standardPrice: null
   });
 
+  const { logActivity } = useActivityLogger();
+
   const [showNewTreatmentWarning, setShowNewTreatmentWarning] = useState(false);
+  const [showOdontogram, setShowOdontogram] = useState(false);
 
   // Debounced treatment lookup
   useEffect(() => {
@@ -196,6 +204,15 @@ export function TreatmentForm({
       setTreatmentMode('completed');
       setPlannedDate(new Date().toISOString().split('T')[0]);
 
+      setPlannedDate(new Date().toISOString().split('T')[0]);
+
+      await logActivity(currentUser as Doctor, 'CREATE_TREATMENT', {
+        patient_id: selectedPatientId,
+        procedure: formData.procedure,
+        cost: Number(formData.cost),
+        status: treatmentMode
+      });
+
       onSuccess();
     } catch (error) {
       onError(error instanceof Error ? error.message : 'Kayıt hatası');
@@ -252,6 +269,36 @@ export function TreatmentForm({
           />
         </div>
       )}
+
+      {/* Odontogram Toggle */}
+      <div className="mb-4">
+        <button
+          type="button"
+          onClick={() => setShowOdontogram(!showOdontogram)}
+          className="flex items-center gap-2 text-sm text-[#0e7490] font-medium hover:bg-[#0e7490]/5 p-2 rounded-lg transition width-full md:w-auto"
+        >
+          <Grid size={18} />
+          {showOdontogram ? 'Görsel Şemayı Gizle' : 'Görsel Diş Şemasını Göster'}
+        </button>
+
+        {showOdontogram && (
+          <div className="mt-4 animate-in fade-in slide-in-from-top-4 duration-300">
+            <Odontogram
+              selectedTeeth={formData.toothNo ? formData.toothNo.split(',').map(s => s.trim()) : []}
+              onToggleTooth={(toothId) => {
+                const currentTeeth = formData.toothNo ? formData.toothNo.split(',').map(s => s.trim()).filter(Boolean) : [];
+                let newTeeth;
+                if (currentTeeth.includes(toothId)) {
+                  newTeeth = currentTeeth.filter(t => t !== toothId);
+                } else {
+                  newTeeth = [...currentTeeth, toothId];
+                }
+                setFormData({ ...formData, toothNo: newTeeth.join(', ') });
+              }}
+            />
+          </div>
+        )}
+      </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -24,6 +24,7 @@ import { AppointmentsTab } from '@/features/appointments';
 import { HelpButton } from '@/components/HelpModal';
 import { PatientImageGallery } from '@/components/PatientImageGallery';
 import { PaymentModal, PaymentQuickAccess } from '@/features/payments';
+import { CommandCenter } from '@/features/dashboard/CommandCenter';
 import { LoginForm } from '@/features/auth';
 import { DoctorSelectionModal } from '@/features/queue';
 import { PatientList, PatientDetail } from '@/features/patients';
@@ -33,12 +34,15 @@ import {
 import {
   cn, formatPhoneNumber, sanitizePhoneNumber, isValidPhoneNumber, getLocalDateString, formatCurrency
 } from '@/lib/utils';
+
 import { hasPermission, canDeletePatient } from '@/lib/permissions';
+import { useActivityLogger } from '@/hooks/useActivityLogger';
 
 
 
 export default function Home() {
   const { toast } = useToast();
+  const { logActivity } = useActivityLogger();
 
   // Appointments - moved here but will be used conditionally
   const [appointmentDate, setAppointmentDate] = useState(new Date());
@@ -142,8 +146,22 @@ export default function Home() {
     timestamp: number;
   }[]>([]);
 
+  // COMMAND CENTER STATE
+  const [showCommandCenter, setShowCommandCenter] = useState(false);
+
   // --- FETCHING ---
-  // --- FETCHING ---
+  // Global Keyboard Shortcuts (Cmd+K)
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setShowCommandCenter((open) => !open);
+      }
+    };
+    document.addEventListener('keydown', down);
+    return () => document.removeEventListener('keydown', down);
+  }, []);
+
   const fetchData = async (overrideUser?: Doctor) => {
     // Use the passed user or current user, but if neither, do not fetch sensitive data
     const activeUser = overrideUser || currentUser;
@@ -305,6 +323,8 @@ export default function Home() {
     const user = users.find((u: Doctor) => u.id === userId);
     if (user && user.pin === pin) {
       setCurrentUser(user);
+      await logActivity(user, 'LOGIN', { role: user.role });
+
       // Trigger fetch for this user
       await fetchData(user);
       if (user.role === 'banko' || user.role === 'asistan') {
@@ -315,6 +335,11 @@ export default function Home() {
       toast({ type: 'error', message: 'Hatalı PIN!' });
       return false;
     }
+  };
+
+  const handleLogout = async () => {
+    await logActivity(currentUser, 'LOGOUT');
+    setCurrentUser(null);
   };
 
   const fetchPasswordChangeHistory = async () => {
@@ -568,18 +593,30 @@ export default function Home() {
         phone: cleanedPhone,
         anamnez: hasPermission.editAnamnez(currentUser.role) ? newPatient.anamnez : '',
         assignment_type: assignmentType,
-        assignment_date: getLocalDateString()
+        assignment_date: getLocalDateString(),
+        created_by: currentUser.id,
+        created_by_name: currentUser.name
       });
 
       if (error) throw error;
 
-      if (error) throw error;
+      if (data) {
+        // Log functionality
+        await logActivity(currentUser, 'CREATE_PATIENT', {
+          patient_id: data.id || (data[0] && data[0].id),
+          name: trimmedName,
+          doctor_name: doctorName
+        });
+
+        if (Array.isArray(data) && data[0]) setSelectedPatientId(data[0].id);
+        else if (!Array.isArray(data) && data.id) setSelectedPatientId(data.id);
+      }
 
       setNewPatient({ name: '', phone: '', anamnez: '' });
       setSelectedDoctorForPatient('');
       setAssignmentMethod(null);
       setShowAddPatientModal(false);
-      if (data && data[0]) setSelectedPatientId(data[0].id);
+
       toast({ type: 'success', message: 'Hasta kartı başarıyla kaydedildi.' });
       fetchData();
     } catch (error) {
@@ -745,7 +782,7 @@ export default function Home() {
           </div>
           <div className="flex gap-1">
             <ThemeToggle />
-            <button onClick={() => setCurrentUser(null)} className="p-2 hover:bg-white/20 rounded-full transition">
+            <button onClick={handleLogout} className="p-2 hover:bg-white/20 rounded-full transition">
               <LogOut size={18} />
             </button>
           </div>
@@ -790,7 +827,7 @@ export default function Home() {
             <button onClick={() => setShowChangePasswordModal(true)} className="p-2 hover:bg-white/10 rounded-full transition text-slate-400 hover:text-white" title="Şifremi Değiştir">
               <Lock size={18} />
             </button>
-            <button onClick={() => setCurrentUser(null)} className="p-2 hover:bg-white/10 rounded-full transition text-red-400 hover:bg-red-500/10 hover:text-red-300" title="Çıkış Yap">
+            <button onClick={handleLogout} className="p-2 hover:bg-white/10 rounded-full transition text-red-400 hover:bg-red-500/10 hover:text-red-300" title="Çıkış Yap">
               <LogOut size={18} />
             </button>
           </div>
@@ -971,7 +1008,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* DETAIL PANEL / MAIN CONTENT */}
+      {/* DUPLICATE PATIENT WARNING STATE */}
       <div className="flex-1 bg-gray-50 flex flex-col h-full overflow-hidden relative pt-16 md:pt-0">
         {activeTab === 'dashboard' ? (
           <div className="h-full overflow-y-auto">
@@ -1561,6 +1598,19 @@ export default function Home() {
       </div>
 
       <AIAssistant />
+
+
+
+      <CommandCenter
+        isOpen={showCommandCenter}
+        onClose={() => setShowCommandCenter(false)}
+        currentUserRole={currentUser.role}
+        patients={patients}
+        onSelectPatient={(patient) => {
+          setSelectedPatientId(patient.id);
+          setActiveTab('patients');
+        }}
+      />
 
       {/* Yardım Sistemi */}
 

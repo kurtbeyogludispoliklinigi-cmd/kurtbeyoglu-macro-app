@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { Banknote, DollarSign } from 'lucide-react';
 import { Doctor, Patient } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
+import { useActivityLogger } from '@/hooks/useActivityLogger';
 
 interface PaymentModalProps {
     isOpen: boolean;
@@ -27,7 +28,9 @@ export function PaymentModal({
     // Internal state to avoid bloating parent
     const [amount, setAmount] = useState<number>(0);
     const [note, setNote] = useState('');
+
     const [loading, setLoading] = useState(false);
+    const { logActivity } = useActivityLogger();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -55,6 +58,14 @@ export function PaymentModal({
             toast({ type: 'success', message: 'Ödeme kaydedildi!' });
             setAmount(0);
             setNote('');
+
+
+            await logActivity(currentUser, 'ADD_PAYMENT', {
+                patient_id: patientId,
+                amount: amount,
+                note: note
+            });
+
             onSuccess(); // Triggers refresh
             onClose();
         } catch (error) {
