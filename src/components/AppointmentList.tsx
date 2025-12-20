@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import {
     Calendar, Clock, User, Trash2, Edit, CheckCircle, XCircle,
-    AlertCircle, ChevronLeft, ChevronRight, Plus, List, LayoutGrid
+    AlertCircle, ChevronLeft, ChevronRight, Plus, List, LayoutGrid, Play
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AgendaView } from './AgendaView';
@@ -22,6 +22,7 @@ interface AppointmentListProps {
 
 const statusConfig = {
     scheduled: { label: 'Planlandı', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', icon: Clock },
+    'in-progress': { label: 'Devam Ediyor', color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400', icon: Play },
     completed: { label: 'Tamamlandı', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', icon: CheckCircle },
     cancelled: { label: 'İptal', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', icon: XCircle },
     'no-show': { label: 'Gelmedi', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400', icon: AlertCircle },
