@@ -21,6 +21,7 @@ export interface Patient {
     doctor_name: string;
     name: string;
     phone: string;
+    notes?: string;
     anamnez: string;
     updated_at: string;
     created_at?: string;

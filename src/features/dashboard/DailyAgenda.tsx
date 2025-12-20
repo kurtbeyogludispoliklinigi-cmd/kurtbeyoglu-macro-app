@@ -85,13 +85,17 @@ export function DailyAgenda({ currentUser }: DailyAgendaProps) {
                                 </h4>
                                 <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
                                     <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${apt.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
-                                            apt.status === 'cancelled' ? 'bg-red-100 text-red-700' :
-                                                apt.status === 'no-show' ? 'bg-orange-100 text-orange-700' :
-                                                    'bg-blue-100 text-blue-700'
+                                            apt.status === 'in-progress' ? 'bg-amber-100 text-amber-700 animate-pulse border border-amber-200' :
+                                                apt.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                                                    apt.status === 'no-show' ? 'bg-orange-100 text-orange-700' :
+                                                        'bg-blue-100 text-blue-700'
                                         }`}>
-                                        {apt.status === 'completed' ? 'Tamamlandı' :
-                                            apt.status === 'cancelled' ? 'İptal' :
-                                                apt.status === 'no-show' ? 'Gelmedi' : 'Planlı'}
+                                        {
+                                            apt.status === 'completed' ? 'Tamamlandı' :
+                                                apt.status === 'in-progress' ? 'Devam Ediyor' :
+                                                    apt.status === 'cancelled' ? 'İptal' :
+                                                        apt.status === 'no-show' ? 'Gelmedi' : 'Planlı'
+                                        }
                                     </span>
                                     {apt.doctor_name && (
                                         <span className="truncate opacity-75">• {apt.doctor_name}</span>

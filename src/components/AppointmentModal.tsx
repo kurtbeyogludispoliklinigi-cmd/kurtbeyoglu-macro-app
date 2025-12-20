@@ -18,7 +18,7 @@ interface AppointmentModalProps {
         appointment_date: string;
         duration_minutes: number;
         notes: string;
-        status: 'scheduled' | 'completed' | 'cancelled' | 'no-show';
+        status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled' | 'no-show';
     }) => Promise<{ success: boolean; error?: string }>;
     patients: Patient[];
     doctorId: string;
@@ -28,8 +28,9 @@ interface AppointmentModalProps {
         appointment_date: string;
         duration_minutes: number;
         notes: string;
-        status: 'scheduled' | 'completed' | 'cancelled' | 'no-show';
+        status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled' | 'no-show';
     };
+    defaultDate?: Date;
 }
 
 export function AppointmentModal({
@@ -39,12 +40,13 @@ export function AppointmentModal({
     patients,
     doctorId,
     existingAppointment,
+    defaultDate,
 }: AppointmentModalProps) {
     const [patientId, setPatientId] = useState('');
     const [date, setDate] = useState('');
     const [duration, setDuration] = useState(30);
     const [notes, setNotes] = useState('');
-    const [status, setStatus] = useState<'scheduled' | 'completed' | 'cancelled' | 'no-show'>('scheduled');
+    const [status, setStatus] = useState<'scheduled' | 'in-progress' | 'completed' | 'cancelled' | 'no-show'>('scheduled');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -62,14 +64,21 @@ export function AppointmentModal({
             } else {
                 // Reset to defaults for new appointment
                 setPatientId('');
-                setDate('');
+                if (defaultDate) {
+                    // Adjust to local timezone offset manually to ensure correct string input
+                    const tzOffset = defaultDate.getTimezoneOffset() * 60000; // offset in milliseconds
+                    const localISOTime = (new Date(defaultDate.getTime() - tzOffset)).toISOString().slice(0, 16);
+                    setDate(localISOTime);
+                } else {
+                    setDate('');
+                }
                 setDuration(30);
                 setNotes('');
                 setStatus('scheduled');
             }
             setError(null);
         }
-    }, [isOpen, existingAppointment]);
+    }, [isOpen, existingAppointment, defaultDate]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -203,6 +212,7 @@ export function AppointmentModal({
                                         className="w-full p-3 border rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:ring-2 focus:ring-teal-500 outline-none"
                                     >
                                         <option value="scheduled">Planlandı</option>
+                                        <option value="in-progress">Devam Ediyor</option>
                                         <option value="completed">Tamamlandı</option>
                                         <option value="cancelled">İptal</option>
                                         <option value="no-show">Gelmedi</option>

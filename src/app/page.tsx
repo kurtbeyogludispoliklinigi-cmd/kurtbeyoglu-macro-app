@@ -2,6 +2,10 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { AuthProvider, useAuth } from '@/features/auth';
+import { PatientProvider, usePatientContext } from '@/features/patients';
+import { TreatmentProvider, useTreatmentContext } from '@/features/treatments';
+import { getPatientStatus } from '@/features/patients/utils';
 import {
   User, Users, Lock, LogOut, Shield, Plus, Search, Trash2,
   Save, RefreshCcw, Phone, Activity, Clock, Cloud, WifiOff, Edit, LayoutDashboard, Calendar, Menu, X, DollarSign, ArrowLeft, Loader2, Banknote
@@ -12,9 +16,7 @@ import AIAssistant from '@/components/AIAssistant';
 import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/useToast';
 import { useDoctors } from '@/hooks/useDoctors';
-import { usePatients } from '@/hooks/usePatients';
-import { useTreatments } from '@/hooks/useTreatments';
-import { useQueue } from '@/hooks/useQueue';
+
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Dashboard } from '@/features/dashboard';
 import { VoiceInput } from '@/components/VoiceInput';
@@ -27,7 +29,8 @@ import { PaymentModal, PaymentQuickAccess } from '@/features/payments';
 import { CommandCenter } from '@/features/dashboard/CommandCenter';
 import { LoginForm } from '@/features/auth';
 import { DoctorSelectionModal } from '@/features/queue';
-import { PatientList, PatientDetail } from '@/features/patients';
+import { PatientList, PatientDetail, PatientCreationProvider, usePatientCreation, DuplicateWarningModal } from '@/features/patients'; // DuplicateWarningModal imported for type safety if needed? Actually handled in Context. 
+import { DoctorManagementModal } from '@/features/doctors';
 import {
   DoctorRole, PaymentStatus, Doctor, Patient, Treatment, TreatmentStatus, QueueData
 } from '@/lib/types';
@@ -41,6 +44,20 @@ import { useActivityLogger } from '@/hooks/useActivityLogger';
 
 
 export default function Home() {
+  return (
+    <AuthProvider>
+      <PatientProvider>
+        <TreatmentProvider>
+          <PatientCreationProvider>
+            <DentalClinicApp />
+          </PatientCreationProvider>
+        </TreatmentProvider>
+      </PatientProvider>
+    </AuthProvider>
+  );
+}
+
+function DentalClinicApp() {
   const { toast } = useToast();
   const { logActivity } = useActivityLogger();
 
@@ -48,18 +65,29 @@ export default function Home() {
   const [appointmentDate, setAppointmentDate] = useState(new Date());
 
   // --- STATE ---
-  const { doctors: users, setDoctors: setUsers, refreshDoctors } = useDoctors();
+  // Auth & Doctors from Context
+  const {
+    currentUser,
+    users,
+    loading: authLoading,
+    login,
+    logout,
+    refreshDoctors,
+    showChangePasswordModal,
+    setShowChangePasswordModal
+  } = useAuth();
 
-
-  const [currentUser, setCurrentUser] = useState<Doctor | null>(null);
 
   // Dependent Hooks
-  const { patients, setPatients, refreshPatients, addPatient, updatePatient, deletePatient, checkDuplicate } = usePatients(currentUser);
-  const { treatments, setTreatments, refreshTreatments, deleteTreatment, updateTreatment } = useTreatments(currentUser, patients);
-  const { queueData, initializeQueue, getNextDoctor, getNextDoctorInQueue } = useQueue(currentUser, users);
+  // Note: users is passed to useQueue, but useDoctors was returning it as 'doctors'.
+  // We renamed it to 'users' in destructuring above.
+
+  const { patients, setPatients, refreshPatients, addPatient, updatePatient, deletePatient, checkDuplicate } = usePatientContext();
+  const { treatments, setTreatments, refreshTreatments, deleteTreatment, updateTreatment } = useTreatmentContext();
 
 
-  const [loading, setLoading] = useState(false);
+
+  const [loading, setLoading] = useState(false); // General loading (data fetching)
   const [dbError, setDbError] = useState(false);
 
   // Pull to Refresh State
@@ -75,28 +103,15 @@ export default function Home() {
   const [treatmentFilter, setTreatmentFilter] = useState<'all' | 'planned' | 'completed'>('all');
 
   // Modals
-  const [showAddPatientModal, setShowAddPatientModal] = useState(false);
-  const [showAddUserModal, setShowAddUserModal] = useState(false);
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [showDoctorSelectionModal, setShowDoctorSelectionModal] = useState(false);
-  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
-  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
-
-  // Duplicate detection state
-  const [duplicatePatients, setDuplicatePatients] = useState<Patient[]>([]);
-  const [proceedWithDuplicate, setProceedWithDuplicate] = useState(false);
-
-  // Password change form state
-  const [currentPin, setCurrentPin] = useState('');
-  const [newPin, setNewPin] = useState('');
-  const [confirmPin, setConfirmPin] = useState('');
-  const [passwordChanges, setPasswordChanges] = useState<Record<string, string>>({});
 
   // View Toggle
   const [activeTab, setActiveTab] = useState<'patients' | 'dashboard' | 'appointments'>('patients');
 
   // Mobile sidebar toggle - default closed on mobile
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+
+  // usePatientCreation
+  const { openCreateModal } = usePatientCreation();
 
   // Mobile detection
   const [isMobile, setIsMobile] = useState(false);
@@ -108,23 +123,20 @@ export default function Home() {
   }, []);
 
   // Forms
-  const [newPatient, setNewPatient] = useState({ name: '', phone: '', anamnez: '' });
   const [showEditPatientModal, setShowEditPatientModal] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
-  const [newDoctor, setNewDoctor] = useState<{ name: string; pin: string; role: DoctorRole }>({ name: '', pin: '', role: 'doctor' });
-  const [editingDoctorId, setEditingDoctorId] = useState<string | null>(null);
 
-  const canSaveNewPatient = useMemo(
-    () => newPatient.name.trim().length > 0 && isValidPhoneNumber(newPatient.phone),
-    [newPatient.name, newPatient.phone]
-  );
+  // Doctor Management State handled in DoctorManagementModal
+  const [showDoctorManagement, setShowDoctorManagement] = useState(false);
 
+  // Edit Patient Validation
   const canSaveEditedPatient = useMemo(
     () => editingPatient ? editingPatient.name.trim().length > 0 && isValidPhoneNumber(editingPatient.phone || '') : false,
     [editingPatient?.name, editingPatient?.phone]
   );
 
   // Payment form state
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentForm, setPaymentForm] = useState({
     patient_id: '',
     payment_amount: 0,
@@ -132,19 +144,15 @@ export default function Home() {
     payment_note: ''
   });
 
-  // Doctor selection for patient creation (BANKO/ASISTAN)
-  const [selectedDoctorForPatient, setSelectedDoctorForPatient] = useState('');
+  // Helper Hooks
+  // Queue logic moved to PatientCreationContext (mostly) but re-used here? 
+  // page.tsx initializes queue for dashboard or general usage?
+  // It seems queueData is only for patient assignment. 
+  // We keep useQueue here if needed for Dashboard? Dashboard uses its own logic or props? 
+  // Dashboard takes 'doctors' prop. 
 
-
-  const [assignmentMethod, setAssignmentMethod] = useState<'manual' | 'queue' | null>(null);
+  // Cleaned up unused state
   const [showPaymentQuickAccess, setShowPaymentQuickAccess] = useState(false);
-
-  // Track recent queue assignments for consecutive detection
-  const [recentQueueAssignments, setRecentQueueAssignments] = useState<{
-    doctorId: string;
-    doctorName: string;
-    timestamp: number;
-  }[]>([]);
 
   // COMMAND CENTER STATE
   const [showCommandCenter, setShowCommandCenter] = useState(false);
@@ -259,32 +267,7 @@ export default function Home() {
 
   const activePatient = patientsWithTreatments.find((p: Patient) => p.id === selectedPatientId);
 
-  // Initialize queue when component mounts or when users change
-  useEffect(() => {
-    if (currentUser && (currentUser.role === 'banko' || currentUser.role === 'asistan')) {
-      initializeQueue();
-    }
-  }, [currentUser, users, initializeQueue]);
 
-  useEffect(() => {
-    if (showDoctorSelectionModal && currentUser && (currentUser.role === 'banko' || currentUser.role === 'asistan')) {
-      initializeQueue();
-    }
-  }, [showDoctorSelectionModal, currentUser]);
-
-  // Clear assignment tracking when switching away from patients tab
-  useEffect(() => {
-    if (activeTab !== 'patients') {
-      setRecentQueueAssignments([]);
-    }
-  }, [activeTab]);
-
-  // Fetch password change history when admin modal opens
-  useEffect(() => {
-    if (showAddUserModal && currentUser?.role === 'admin') {
-      fetchPasswordChangeHistory();
-    }
-  }, [showAddUserModal]);
 
   // --- HANDLERS ---
   // --- PULL TO REFRESH HANDLERS ---
@@ -319,347 +302,12 @@ export default function Home() {
     setPullStart(0);
   };
 
-  const handleLogin = async (userId: string, pin: string): Promise<boolean> => {
-    const user = users.find((u: Doctor) => u.id === userId);
-    if (user && user.pin === pin) {
-      setCurrentUser(user);
-      await logActivity(user, 'LOGIN', { role: user.role });
-
-      // Trigger fetch for this user
-      await fetchData(user);
-      if (user.role === 'banko' || user.role === 'asistan') {
-        await initializeQueue();
-      }
-      return true;
-    } else {
-      toast({ type: 'error', message: 'Hatalı PIN!' });
-      return false;
-    }
-  };
-
-  const handleLogout = async () => {
-    await logActivity(currentUser, 'LOGOUT');
-    setCurrentUser(null);
-  };
-
-  const fetchPasswordChangeHistory = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('password_change_log')
-        .select('doctor_id, changed_at')
-        .order('changed_at', { ascending: false });
-
-      if (error) throw error;
-
-      // Create a map of doctor_id to most recent change date
-      const changeMap: Record<string, string> = {};
-      data?.forEach(log => {
-        if (!changeMap[log.doctor_id]) {
-          changeMap[log.doctor_id] = log.changed_at;
-        }
-      });
-
-      setPasswordChanges(changeMap);
-    } catch (error) {
-      console.error('Failed to fetch password change history:', error);
-    }
-  };
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentUser) return;
-
-    // Validation
-    if (currentUser.pin !== currentPin) {
-      toast({ type: 'error', message: 'Mevcut PIN hatalı!' });
-      return;
-    }
-
-    if (newPin.length < 4) {
-      toast({ type: 'error', message: 'Yeni PIN en az 4 haneli olmalıdır!' });
-      return;
-    }
-
-    if (newPin !== confirmPin) {
-      toast({ type: 'error', message: 'Yeni PIN eşleşmiyor!' });
-      return;
-    }
-
-    if (newPin === currentPin) {
-      toast({ type: 'error', message: 'Yeni PIN eskisiyle aynı olamaz!' });
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      // Update password in doctors table
-      const { error: updateError } = await supabase
-        .from('doctors')
-        .update({ pin: newPin })
-        .eq('id', currentUser.id);
-
-      if (updateError) throw updateError;
-
-      // Log the password change
-      const { error: logError } = await supabase
-        .from('password_change_log')
-        .insert({
-          doctor_id: currentUser.id,
-          changed_by: currentUser.name,
-          ip_address: null, // Can be added with IP detection library if needed
-          user_agent: navigator.userAgent
-        });
-
-      if (logError) console.warn('Password change log failed:', logError);
-
-      // Update local state
-      setCurrentUser({ ...currentUser, pin: newPin });
-
-      // Reset form
-      setCurrentPin('');
-      setNewPin('');
-      setConfirmPin('');
-      setShowChangePasswordModal(false);
-
-      toast({ type: 'success', message: 'Şifreniz başarıyla değiştirildi!' });
-
-      // Refresh users list
-      fetchData();
-    } catch (error) {
-      console.error('Password change error:', error);
-      toast({ type: 'error', message: 'Şifre değiştirme hatası!' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSaveDoctor = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newDoctor.name || !newDoctor.pin) return;
-    setLoading(true);
-
-    try {
-      if (editingDoctorId) {
-        const { error } = await supabase.from('doctors').update({
-          name: newDoctor.name,
-          pin: newDoctor.pin,
-          role: newDoctor.role || 'doctor'
-        }).eq('id', editingDoctorId);
-        if (error) throw error;
-
-        setEditingDoctorId(null);
-        setNewDoctor({ name: '', pin: '', role: 'doctor' });
-        toast({ type: 'success', message: 'Kullanıcı güncellendi!' });
-        const { data } = await supabase.from('doctors').select('*');
-        if (data) setUsers(data);
-      } else {
-        const { error } = await supabase.from('doctors').insert({
-          name: newDoctor.name,
-          role: newDoctor.role || 'doctor',
-          pin: newDoctor.pin
-        });
-        if (error) throw error;
-
-        setNewDoctor({ name: '', pin: '', role: 'doctor' });
-        toast({ type: 'success', message: 'Yeni kullanıcı eklendi!' });
-        // Refresh doctors list manually since fetchData(currentUser) might not fetch doctors
-        const { data } = await supabase.from('doctors').select('*');
-        if (data) setUsers(data);
-      }
-    } catch (error) {
-      console.error('Doctor save error:', error);
-      toast({ type: 'error', message: 'Kullanıcı kaydedilemedi. İnternet bağlantınızı kontrol edin.' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteDoctor = async (id: string) => {
-    if (!confirm('Hekimi sil?')) return;
-    setLoading(true);
-    try {
-      const { error } = await supabase.from('doctors').delete().eq('id', id);
-      if (error) throw error;
-      toast({ type: 'success', message: 'Hekim silindi.' });
-      fetchData();
-    } catch (error) {
-      console.error('Doctor delete error:', error);
-      toast({ type: 'error', message: 'Hekim silinemedi. İnternet veya ilişkili kayıtları kontrol edin.' });
-    } finally {
-      setLoading(false);
-    }
-  };
+  // handleLogin and handleLogout are now provided by AuthProvider
 
 
+  // handleChangePassword is fully handled by AuthProvider and PasswordChangeModal component in the provider.
 
-  const handleAddPatient = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentUser) return;
 
-    const cleanedPhone = sanitizePhoneNumber(newPatient.phone);
-    const trimmedName = newPatient.name.trim();
-
-    if (!trimmedName || !isValidPhoneNumber(newPatient.phone)) {
-      toast({ type: 'error', message: 'Ad Soyad ve geçerli telefon zorunludur.' });
-      return;
-    }
-
-    try {
-      // DUPLIKASYON KONTROLÜ - Check for duplicate patients
-      if (!proceedWithDuplicate) {
-        const duplicateCheck = await checkDuplicate(trimmedName, cleanedPhone);
-
-        if (duplicateCheck.hasDuplicate) {
-          setDuplicatePatients(duplicateCheck.duplicates);
-          setShowDuplicateWarning(true);
-          return;
-        }
-      }
-
-      // Hekim ID belirleme
-      let doctorId = currentUser.id;
-      let doctorName = currentUser.name;
-      let assignmentType: 'queue' | 'preference' = 'preference'; // Default to preference
-
-      if (currentUser.role === 'banko' || currentUser.role === 'asistan') {
-        // Check if doctor was selected via the selection modal
-        if (!selectedDoctorForPatient) {
-          toast({ type: 'error', message: 'Lütfen hekim seçin' });
-          return;
-        }
-        doctorId = selectedDoctorForPatient;
-        const selectedDoc = users.find(u => u.id === selectedDoctorForPatient);
-        doctorName = selectedDoc?.name || '';
-
-        // Determine assignment type based on selection method
-        if (assignmentMethod === 'queue') {
-          assignmentType = 'queue';
-        } else {
-          assignmentType = 'preference';
-        }
-      }
-
-      // Check for consecutive queue assignments
-      if (currentUser.role === 'banko' || currentUser.role === 'asistan') {
-        if (assignmentType === 'queue' && assignmentMethod === 'queue') {
-          // Check last assignments
-          const recentSameDoctor = recentQueueAssignments.filter(
-            (assignment) =>
-              assignment.doctorId === doctorId &&
-              Date.now() - assignment.timestamp < 3600000 // Within last hour
-          );
-
-          if (recentSameDoctor.length >= 1) {
-            // Get current distribution for context
-            const today = getLocalDateString();
-            const todaysPatients = patients.filter(p => p.assignment_date === today);
-            const doctorStats: Record<string, number> = {};
-
-            todaysPatients.forEach(p => {
-              if (p.assignment_type === 'queue') {
-                doctorStats[p.doctor_id] = (doctorStats[p.doctor_id] || 0) + 1;
-              }
-            });
-
-            const currentDoctorCount = (doctorStats[doctorId] || 0) + recentSameDoctor.length;
-            const otherCounts = Object.values(doctorStats).filter((_, idx) =>
-              Object.keys(doctorStats)[idx] !== doctorId
-            );
-            const avgOthers = otherCounts.length > 0
-              ? Math.round(otherCounts.reduce((a, b) => a + b, 0) / otherCounts.length)
-              : 0;
-
-            toast({
-              type: 'warning',
-              message: `⚠️ Dikkat: ${doctorName} hekime arka arkaya ${recentSameDoctor.length + 1}. hasta ekleniyor! (Bugün: ${currentDoctorCount + 1}, Diğer hekimler ort: ${avgOthers})`,
-              duration: 5000
-            });
-          }
-
-          // Track this assignment
-          setRecentQueueAssignments(prev => [
-            ...prev.slice(-4), // Keep last 5 assignments
-            { doctorId, doctorName, timestamp: Date.now() }
-          ]);
-        }
-      }
-
-      setLoading(true);
-      const { data, error } = await addPatient({
-        doctor_id: doctorId,
-        doctor_name: doctorName,
-        name: trimmedName,
-        phone: cleanedPhone,
-        anamnez: hasPermission.editAnamnez(currentUser.role) ? newPatient.anamnez : '',
-        assignment_type: assignmentType,
-        assignment_date: getLocalDateString(),
-        created_by: currentUser.id,
-        created_by_name: currentUser.name
-      });
-
-      if (error) throw error;
-
-      if (data) {
-        // Log functionality
-        await logActivity(currentUser, 'CREATE_PATIENT', {
-          patient_id: data.id || (data[0] && data[0].id),
-          name: trimmedName,
-          doctor_name: doctorName
-        });
-
-        if (Array.isArray(data) && data[0]) setSelectedPatientId(data[0].id);
-        else if (!Array.isArray(data) && data.id) setSelectedPatientId(data.id);
-      }
-
-      setNewPatient({ name: '', phone: '', anamnez: '' });
-      setSelectedDoctorForPatient('');
-      setAssignmentMethod(null);
-      setShowAddPatientModal(false);
-
-      toast({ type: 'success', message: 'Hasta kartı başarıyla kaydedildi.' });
-      fetchData();
-    } catch (error) {
-      console.error('Patient add error:', error);
-      toast({ type: 'error', message: 'Kayıt yapılamadı. İnternet bağlantınızı kontrol edin.' });
-    } finally {
-      setLoading(false);
-      // Reset duplicate flags
-      setProceedWithDuplicate(false);
-      setDuplicatePatients([]);
-    }
-  };
-
-  const handleDoctorSelection = async (method: 'manual' | 'queue', doctorId?: string) => {
-    setAssignmentMethod(method);
-    if (method === 'queue') {
-      // Get next doctor from queue
-      const nextDoctorId = await getNextDoctor();
-      if (nextDoctorId) {
-        setSelectedDoctorForPatient(nextDoctorId);
-        setShowDoctorSelectionModal(false);
-        setShowAddPatientModal(true);
-      }
-    } else if (method === 'manual') {
-      // User will select from dropdown in the patient modal
-      if (!doctorId) {
-        toast({ type: 'error', message: 'Lütfen bir hekim seçin' });
-        return;
-      }
-      setSelectedDoctorForPatient(doctorId);
-      setShowDoctorSelectionModal(false);
-      setShowAddPatientModal(true);
-    }
-  };
-
-  const handleNewPatientClick = () => {
-    // For banko/asistan, show doctor selection modal first
-    if (currentUser && (currentUser.role === 'banko' || currentUser.role === 'asistan')) {
-      setShowDoctorSelectionModal(true);
-    } else {
-      setShowAddPatientModal(true);
-    }
-  };
 
   const openPatientEditor = (patient: Patient) => {
     setEditingPatient({ ...patient, phone: formatPhoneNumber(patient.phone || '') });
@@ -752,8 +400,8 @@ export default function Home() {
     return (
       <LoginForm
         users={users}
-        loading={loading}
-        onLogin={handleLogin}
+        loading={authLoading}
+        onLogin={login}
       />
     );
   }
@@ -782,7 +430,7 @@ export default function Home() {
           </div>
           <div className="flex gap-1">
             <ThemeToggle />
-            <button onClick={handleLogout} className="p-2 hover:bg-white/20 rounded-full transition">
+            <button onClick={logout} className="p-2 hover:bg-white/20 rounded-full transition">
               <LogOut size={18} />
             </button>
           </div>
@@ -812,7 +460,7 @@ export default function Home() {
         <div className="hidden md:flex p-6 text-white justify-between items-center shadow-sm bg-[#0f172a]">
           <div>
             <h1 className="font-bold text-lg flex items-center gap-3">
-              <img src="/logo.png" alt="Logo" className="w-10 h-10 rounded-lg bg-white p-1 object-contain" />
+              <img src="/logo.png" alt="Kurtbeyoğlu Diş Kliniği" className="h-10 w-auto rounded-lg bg-white p-1 object-contain" />
               <div className="flex flex-col">
                 <span className="text-sm font-semibold text-slate-100">{currentUser.name}</span>
                 <span className="text-[10px] font-medium text-[#cca43b] uppercase tracking-wide">Özel Kurtbeyoğlu Polikliniği</span>
@@ -827,7 +475,7 @@ export default function Home() {
             <button onClick={() => setShowChangePasswordModal(true)} className="p-2 hover:bg-white/10 rounded-full transition text-slate-400 hover:text-white" title="Şifremi Değiştir">
               <Lock size={18} />
             </button>
-            <button onClick={handleLogout} className="p-2 hover:bg-white/10 rounded-full transition text-red-400 hover:bg-red-500/10 hover:text-red-300" title="Çıkış Yap">
+            <button onClick={logout} className="p-2 hover:bg-white/10 rounded-full transition text-red-400 hover:bg-red-500/10 hover:text-red-300" title="Çıkış Yap">
               <LogOut size={18} />
             </button>
           </div>
@@ -856,7 +504,7 @@ export default function Home() {
               <button onClick={() => setShowChangePasswordModal(true)} className="p-2 hover:bg-gray-100 rounded-full transition" title="Şifremi Değiştir">
                 <Lock size={18} className="text-gray-600" />
               </button>
-              <button onClick={() => setCurrentUser(null)} className="p-2 hover:bg-gray-100 rounded-full transition" title="Çıkış Yap">
+              <button onClick={logout} className="p-2 hover:bg-gray-100 rounded-full transition" title="Çıkış Yap">
                 <LogOut size={18} className="text-gray-600" />
               </button>
             </div>
@@ -866,7 +514,7 @@ export default function Home() {
         {/* Admin Button */}
         {hasPermission.manageUsers(currentUser.role) && (
           <div className="p-2 bg-indigo-50 border-b">
-            <button onClick={() => setShowAddUserModal(true)} className="flex items-center justify-center gap-2 w-full p-2 bg-white border border-indigo-200 rounded hover:bg-indigo-100 text-indigo-700 font-medium text-sm transition">
+            <button onClick={() => setShowDoctorManagement(true)} className="flex items-center justify-center gap-2 w-full p-2 bg-white border border-indigo-200 rounded hover:bg-indigo-100 text-indigo-700 font-medium text-sm transition">
               <Users size={16} /> Hekim Yönetimi
             </button>
           </div>
@@ -930,7 +578,7 @@ export default function Home() {
             {/* New Patient Button */}
             <div className="flex gap-2">
               <button
-                onClick={handleNewPatientClick}
+                onClick={openCreateModal}
                 className="touch-target flex-1 bg-[#cca43b] text-[#0f172a] py-2.5 rounded-xl font-bold hover:bg-[#b59030] transition flex justify-center items-center gap-2 shadow-lg shadow-[#cca43b]/20 active:scale-[0.98] text-sm"
               >
                 <Plus size={18} /> YENİ HASTA
@@ -1045,7 +693,7 @@ export default function Home() {
                 />
               </div>
               <button
-                onClick={handleNewPatientClick}
+                onClick={openCreateModal}
                 className="touch-target mt-3 w-full bg-[#0e7490] text-white py-3 rounded-xl font-bold hover:bg-[#155e75] transition flex justify-center items-center gap-2 shadow-lg active:scale-[0.98]"
               >
                 <Plus size={18} /> YENİ HASTA EKLE
@@ -1056,90 +704,111 @@ export default function Home() {
               <div className="text-center p-8 text-gray-400">Kayıt bulunamadı.</div>
             ) : (
               <ul className="divide-y">
-                {filteredPatients.map(p => (
-                  <li key={p.id} className="relative overflow-hidden">
-                    {/* Background actions */}
-                    <div className="absolute inset-0 flex items-center justify-between pointer-events-none">
-                      <div className="h-full w-1/2 bg-green-50 flex items-center pl-4 text-green-600">
-                        <Edit size={18} />
-                      </div>
-                      <div className="h-full w-1/2 bg-red-50 flex items-center justify-end pr-4 text-red-600">
-                        <Trash2 size={18} />
-                      </div>
-                    </div>
+                {filteredPatients.map(p => {
+                  // Mobile Status Logic (Shared)
+                  const status = getPatientStatus(p);
 
-                    <motion.div
-                      drag="x"
-                      dragConstraints={{ left: -80, right: 80 }}
-                      dragElastic={0.2}
-                      onDragEnd={(e, info) => {
-                        if (info.offset.x > 50) {
-                          // Edit
-                          if ((currentUser.role === 'admin' || currentUser.role === 'banko' || currentUser.role === 'asistan') ||
-                            (currentUser.role === 'doctor' && p.doctor_id === currentUser.id)) {
-                            openPatientEditor(p);
-                          } else {
-                            toast({ type: 'error', message: 'Düzenleme yetkiniz yok.' });
+                  return (
+                    <li key={p.id} className="relative overflow-hidden">
+                      {/* Background actions */}
+                      <div className="absolute inset-0 flex items-center justify-between pointer-events-none">
+                        <div className="h-full w-1/2 bg-green-50 flex items-center pl-4 text-green-600">
+                          <Edit size={18} />
+                        </div>
+                        <div className="h-full w-1/2 bg-red-50 flex items-center justify-end pr-4 text-red-600">
+                          <Trash2 size={18} />
+                        </div>
+                      </div>
+
+                      <motion.div
+                        drag="x"
+                        dragConstraints={{ left: -80, right: 80 }}
+                        dragElastic={0.2}
+                        onDragEnd={(e, info) => {
+                          if (info.offset.x > 50) {
+                            // Edit
+                            if ((currentUser.role === 'admin' || currentUser.role === 'banko' || currentUser.role === 'asistan') ||
+                              (currentUser.role === 'doctor' && p.doctor_id === currentUser.id)) {
+                              openPatientEditor(p);
+                            } else {
+                              toast({ type: 'error', message: 'Düzenleme yetkiniz yok.' });
+                            }
                           }
-                        }
-                        if (info.offset.x < -50) {
-                          // Delete
-                          if (canDeletePatient(currentUser, p)) {
-                            handleDeletePatient(p.id);
-                          } else {
-                            toast({ type: 'error', message: 'Silme yetkiniz yok.' });
+                          if (info.offset.x < -50) {
+                            // Delete
+                            if (canDeletePatient(currentUser, p)) {
+                              handleDeletePatient(p.id);
+                            } else {
+                              toast({ type: 'error', message: 'Silme yetkiniz yok.' });
+                            }
                           }
-                        }
-                      }}
-                      onClick={() => {
-                        setSelectedPatientId(p.id);
-                        setShowMobileSidebar(false);
-                      }}
-                      className={cn(
-                        "relative z-10 p-4 cursor-pointer bg-white hover:bg-teal-50 transition",
-                        selectedPatientId === p.id && 'bg-teal-50'
-                      )}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="font-semibold text-gray-800">{p.name}</h3>
-                          <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
-                            <Phone size={12} /> {formatPhoneNumber(p.phone || '') || 'Tel yok'}
-                          </p>
-                          {hasPermission.viewAllPatients(currentUser.role) && (
-                            <div className="flex flex-wrap gap-1.5 mt-1.5">
-                              <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">
-                                Hekim: {p.doctor_name || 'Bilinmiyor'}
-                              </span>
-                              {p.assignment_type && (
-                                <span className={cn(
-                                  "text-[10px] px-1.5 py-0.5 rounded font-medium",
-                                  p.assignment_type === 'queue'
-                                    ? "bg-amber-100 text-amber-700"
-                                    : "bg-purple-100 text-purple-700"
-                                )}>
-                                  {p.assignment_type === 'queue' ? '🔄 Sıralı' : '⭐ Tercihli'}
+                        }}
+                        onClick={() => {
+                          setSelectedPatientId(p.id);
+                          setShowMobileSidebar(false);
+                        }}
+                        className={cn(
+                          "relative z-10 p-4 cursor-pointer bg-white hover:bg-teal-50 transition",
+                          selectedPatientId === p.id && 'bg-teal-50',
+                          // Status Borders
+                          selectedPatientId !== p.id && status === 'debt' && 'border-l-4 border-l-red-500',
+                          selectedPatientId !== p.id && status === 'planned' && 'border-l-4 border-l-blue-500',
+                          selectedPatientId !== p.id && status === 'active' && 'border-l-4 border-l-transparent'
+                        )}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold text-gray-800">{p.name}</h3>
+                              {status === 'debt' && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+                                  Borçlu
                                 </span>
                               )}
-                              {p.assignment_date && (
-                                <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
-                                  📅 {new Date(p.assignment_date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
+                              {status === 'planned' && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+                                  Planlı
                                 </span>
                               )}
                             </div>
-                          )}
+                            <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
+                              <Phone size={12} /> {formatPhoneNumber(p.phone || '') || 'Tel yok'}
+                            </p>
+                            {hasPermission.viewAllPatients(currentUser.role) && (
+                              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">
+                                  Hekim: {p.doctor_name || 'Bilinmiyor'}
+                                </span>
+                                {p.assignment_type && (
+                                  <span className={cn(
+                                    "text-[10px] px-1.5 py-0.5 rounded font-medium",
+                                    p.assignment_type === 'queue'
+                                      ? "bg-amber-100 text-amber-700"
+                                      : "bg-purple-100 text-purple-700"
+                                  )}>
+                                    {p.assignment_type === 'queue' ? '🔄 Sıralı' : '⭐ Tercihli'}
+                                  </span>
+                                )}
+                                {p.assignment_date && (
+                                  <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+                                    📅 {new Date(p.assignment_date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            {p.updated_at && (
+                              <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full">
+                                {new Date(p.updated_at).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-right">
-                          {p.updated_at && (
-                            <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full">
-                              {new Date(p.updated_at).toLocaleDateString()}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </motion.div>
-                  </li>
-                ))}
+                      </motion.div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
@@ -1215,59 +884,9 @@ export default function Home() {
 
       {/* MODALS */}
       {/* Doctor Selection Modal (for BANKO/ASISTAN) */}
-      {/* Doctor Selection Modal (for BANKO/ASISTAN) */}
-      <DoctorSelectionModal
-        isOpen={showDoctorSelectionModal}
-        onClose={() => {
-          setShowDoctorSelectionModal(false);
-          setSelectedDoctorForPatient('');
-        }}
-        users={users}
-        nextDoctorInQueue={getNextDoctorInQueue()}
-        onConfirm={handleDoctorSelection}
-      />
 
-      {showAddPatientModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 p-0 md:p-4 backdrop-blur-sm">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="bg-white w-full h-[100dvh] md:h-auto md:max-w-md md:rounded-xl shadow-2xl p-5 md:p-6 overflow-y-auto"
-          >
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg md:text-xl font-bold text-gray-800">Yeni Hasta Kartı</h3>
-              <button onClick={() => setShowAddPatientModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
-            </div>
-            <form onSubmit={handleAddPatient} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ad Soyad *</label>
-                <input type="text" required placeholder="Ad Soyad" className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none" value={newPatient.name} onChange={e => setNewPatient({ ...newPatient, name: e.target.value })} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Telefon</label>
-                <input type="tel" placeholder="(5XX) XXX XX XX" required className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none" value={newPatient.phone} onChange={e => setNewPatient({ ...newPatient, phone: formatPhoneNumber(e.target.value) })} />
-                <p className="text-xs text-gray-500 mt-1">Sadece 5 ile başlayan 10 haneli numara kabul edilir.</p>
-              </div>
-              {(currentUser.role === 'banko' || currentUser.role === 'asistan') && selectedDoctorForPatient && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Seçilen Hekim</label>
-                  <div className="w-full p-3 border border-teal-200 bg-teal-50 rounded-lg text-base font-semibold text-teal-800">
-                    {users.find(u => u.id === selectedDoctorForPatient)?.name || 'Bilinmiyor'}
-                  </div>
-                </div>
-              )}
-              {hasPermission.editAnamnez(currentUser.role) && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Anamnez</label>
-                  <textarea placeholder="Anamnez..." className="w-full p-3 border border-red-200 bg-red-50 rounded-lg text-base focus:ring-2 focus:ring-red-300 outline-none" rows={3} value={newPatient.anamnez} onChange={e => setNewPatient({ ...newPatient, anamnez: e.target.value })}></textarea>
-                </div>
-              )}
-              <button type="submit" disabled={loading || !canSaveNewPatient || ((currentUser.role === 'banko' || currentUser.role === 'asistan') && !selectedDoctorForPatient)} className="w-full bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 text-base disabled:opacity-50 disabled:cursor-not-allowed">{loading ? 'Kaydediyor...' : 'Kaydet'}</button>
-            </form>
-          </motion.div>
-        </div>
-      )}
+
+
 
       {showEditPatientModal && editingPatient && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
@@ -1318,279 +937,21 @@ export default function Home() {
       />
 
       {/* Password Change Modal */}
-      {showChangePasswordModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 p-0 md:p-4 backdrop-blur-sm">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="bg-white w-full h-[100dvh] md:h-auto md:max-w-sm md:rounded-xl shadow-2xl p-6 overflow-y-auto"
-          >
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                <Lock size={20} className="text-teal-600" />
-                Şifre Değiştir
-              </h3>
-              <button
-                onClick={() => {
-                  setShowChangePasswordModal(false);
-                  setCurrentPin('');
-                  setNewPin('');
-                  setConfirmPin('');
-                }}
-                className="text-gray-400 hover:text-gray-600 text-2xl"
-              >
-                &times;
-              </button>
-            </div>
-
-            <form onSubmit={handleChangePassword} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Mevcut PIN
-                </label>
-                <input
-                  type="password"
-                  placeholder="****"
-                  value={currentPin}
-                  onChange={(e) => setCurrentPin(e.target.value)}
-                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-center tracking-widest"
-                  required
-                  maxLength={6}
-                  autoComplete="current-password"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Yeni PIN
-                </label>
-                <input
-                  type="password"
-                  placeholder="****"
-                  value={newPin}
-                  onChange={(e) => setNewPin(e.target.value)}
-                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-center tracking-widest"
-                  required
-                  minLength={4}
-                  maxLength={6}
-                  autoComplete="new-password"
-                />
-                <p className="text-xs text-gray-500 mt-1">En az 4 haneli olmalıdır</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Yeni PIN (Tekrar)
-                </label>
-                <input
-                  type="password"
-                  placeholder="****"
-                  value={confirmPin}
-                  onChange={(e) => setConfirmPin(e.target.value)}
-                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-center tracking-widest"
-                  required
-                  minLength={4}
-                  maxLength={6}
-                  autoComplete="new-password"
-                />
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowChangePasswordModal(false);
-                    setCurrentPin('');
-                    setNewPin('');
-                    setConfirmPin('');
-                  }}
-                  className="flex-1 py-3 border rounded-lg font-medium hover:bg-gray-50"
-                >
-                  İptal
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 disabled:opacity-50"
-                >
-                  {loading ? 'Kaydediliyor...' : 'Değiştir'}
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
+      {/* Password Change Modal is now handled globally by AuthProvider */}
 
       {/* Duplicate Patient Warning Modal */}
-      {showDuplicateWarning && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-xl font-bold text-orange-600 mb-4">
-              ⚠️ Benzer Hasta Kaydı Bulundu
-            </h3>
 
-            <p className="text-gray-700 mb-4">
-              Sistemde benzer hasta(lar) mevcut:
-            </p>
 
-            <div className="space-y-2 mb-6">
-              {duplicatePatients.map(p => (
-                <div key={p.id} className="border rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition">
-                  <div className="font-semibold text-gray-800">{p.name}</div>
-                  <div className="text-sm text-gray-600">
-                    📞 {p.phone || 'Tel yok'} | 👨‍⚕️ {p.doctor_name}
-                  </div>
-                  <button
-                    onClick={() => {
-                      setSelectedPatientId(p.id);
-                      setShowDuplicateWarning(false);
-                      setShowAddPatientModal(false);
-                      setDuplicatePatients([]);
-                      toast({ type: 'info', message: 'Mevcut hasta seçildi' });
-                    }}
-                    className="mt-2 text-sm text-teal-600 hover:underline font-medium"
-                  >
-                    Bu hastayı seç →
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setShowDuplicateWarning(false);
-                  setProceedWithDuplicate(false);
-                }}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50 transition"
-              >
-                İptal
-              </button>
-              <button
-                onClick={() => {
-                  setProceedWithDuplicate(true);
-                  setShowDuplicateWarning(false);
-                  // Re-trigger form submission after a brief delay
-                  setTimeout(() => {
-                    const form = document.querySelector('form[data-patient-form]');
-                    if (form) {
-                      const event = new Event('submit', { bubbles: true, cancelable: true });
-                      form.dispatchEvent(event);
-                    }
-                  }, 100);
-                }}
-                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium transition"
-              >
-                Yine de Yeni Hasta Ekle
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showAddUserModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 p-0 md:p-4 backdrop-blur-sm">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="bg-white w-full h-[100dvh] md:h-auto md:max-w-lg md:rounded-xl shadow-2xl p-5 md:p-6 overflow-y-auto"
-          >
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg md:text-xl font-bold text-indigo-800">Hekim Yönetimi</h3>
-              <button onClick={() => { setShowAddUserModal(false); }} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
-            </div>
-
-            <form onSubmit={handleSaveDoctor} className="space-y-4 bg-gray-50 p-4 rounded-lg mb-6 border">
-              <div className="text-sm font-bold text-gray-700 mb-2">{editingDoctorId ? 'Kullanıcıyı Düzenle' : 'Yeni Kullanıcı Ekle'}</div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Ad Soyad</label>
-                  <input type="text" required placeholder="Ad Soyad" className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-indigo-500 outline-none" value={newDoctor.name} onChange={e => setNewDoctor({ ...newDoctor, name: e.target.value })} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">PIN</label>
-                  <input type="text" required placeholder="PIN" className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-indigo-500 outline-none" value={newDoctor.pin} onChange={e => setNewDoctor({ ...newDoctor, pin: e.target.value })} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Rol</label>
-                  <select
-                    value={newDoctor.role || 'doctor'}
-                    onChange={(e) => setNewDoctor({ ...newDoctor, role: e.target.value as DoctorRole })}
-                    className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-indigo-500 outline-none"
-                    required
-                  >
-                    <option value="doctor">HEKİM</option>
-                    <option value="banko">BANKO</option>
-                    <option value="asistan">ASİSTAN</option>
-                  </select>
-                </div>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <button type="submit" disabled={loading} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700 shadow-sm text-base disabled:opacity-50">{loading ? '...' : (editingDoctorId ? 'Güncelle' : 'Ekle')}</button>
-                {editingDoctorId && <button type="button" onClick={() => { setEditingDoctorId(null); setNewDoctor({ name: '', pin: '', role: 'doctor' }); }} className="px-4 py-2 bg-gray-300 rounded-lg hover:bg-gray-400 font-medium text-base">İptal</button>}
-              </div>
-            </form>
-
-            <div>
-              <h4 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                <Users size={16} className="text-gray-500" /> Mevcut Hekimler
-              </h4>
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                {users.filter(u => u.role !== 'admin').length === 0 && <p className="text-sm text-gray-400 italic">Henüz kayıtlı hekim yok.</p>}
-                {users.filter(u => u.role !== 'admin').map(doctor => (
-                  <div key={doctor.id} className="flex justify-between items-center p-3 bg-white border rounded-lg hover:shadow-sm transition group">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-gray-800">{doctor.name}</span>
-                        <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-semibold",
-                          doctor.role === 'doctor' ? 'bg-teal-100 text-teal-700' :
-                            doctor.role === 'banko' ? 'bg-amber-100 text-amber-700' :
-                              'bg-purple-100 text-purple-700'
-                        )}>
-                          {doctor.role === 'doctor' ? 'HEKİM' :
-                            doctor.role === 'banko' ? 'BANKO' :
-                              'ASİSTAN'}
-                        </span>
-                      </div>
-                      <div className="space-y-1">
-                        <span className="text-xs text-gray-400 font-mono tracking-wider">PIN: {doctor.pin}</span>
-                        <div className="text-xs text-gray-500">
-                          Son şifre değişikliği:{' '}
-                          {passwordChanges[doctor.id]
-                            ? new Date(passwordChanges[doctor.id]).toLocaleString('tr-TR', {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })
-                            : 'Hiç değiştirilmedi'}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 opacity-80 group-hover:opacity-100 transition">
-                      <button onClick={() => { setEditingDoctorId(doctor.id); setNewDoctor({ name: doctor.name, pin: doctor.pin, role: doctor.role }); }} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-full transition" title="Düzenle">
-                        <Edit size={16} />
-                      </button>
-                      <button onClick={() => handleDeleteDoctor(doctor.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-full transition" title="Sil">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      )}
+      <DoctorManagementModal
+        isOpen={showDoctorManagement}
+        onClose={() => setShowDoctorManagement(false)}
+      />
 
       {/* Mobile Floating Action Button (FAB) */}
       <div className="md:hidden fixed bottom-20 right-4 z-40 group">
         <span className="absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-20 animate-ping group-hover:opacity-40"></span>
         <button
-          onClick={handleNewPatientClick}
+          onClick={openCreateModal}
           className="relative inline-flex items-center justify-center w-14 h-14 bg-[#cca43b] text-[#0f172a] rounded-full shadow-2xl hover:scale-110 transition-all duration-300 active:scale-95 border-2 border-[#b59030]"
         >
           <Plus size={28} strokeWidth={3} />

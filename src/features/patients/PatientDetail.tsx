@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-    ArrowLeft, Phone, User, Edit, Trash2, DollarSign, Clock
+    ArrowLeft, Phone, User, Edit, Trash2, DollarSign, Clock, Save
 } from 'lucide-react';
 import { Patient, Doctor, Treatment } from '@/lib/types';
 import { cn, formatPhoneNumber } from '@/lib/utils';
@@ -12,6 +12,7 @@ import { TreatmentForm } from '@/features/treatments';
 import { useToast } from '@/hooks/useToast';
 import { PatientTimeline } from './PatientTimeline';
 import { LayoutList, GitCommit } from 'lucide-react';
+import { usePatientContext } from './PatientProvider';
 
 interface PatientDetailProps {
     patient: Patient;
@@ -46,6 +47,16 @@ export function PatientDetail({
     const [treatmentFilter, setTreatmentFilter] = useState<'all' | 'planned' | 'completed'>('all');
     const [viewMode, setViewMode] = useState<'list' | 'timeline'>('timeline');
 
+    // Quick Notes State
+    const { updatePatient } = usePatientContext();
+    const [isEditingNotes, setIsEditingNotes] = useState(false);
+    const [localNotes, setLocalNotes] = useState(patient.notes || '');
+
+    // Reset local notes if patient changes
+    React.useEffect(() => {
+        setLocalNotes(patient.notes || '');
+    }, [patient.notes]);
+
     return (
         <>
             <div className="bg-white p-4 md:p-6 shadow-sm border-b flex flex-col sm:flex-row justify-between items-start gap-4">
@@ -71,8 +82,56 @@ export function PatientDetail({
                         </span>
                     </div>
 
-                    <div className="mt-4">
+                    <div className="mt-4 bg-amber-50 rounded-lg p-3 border border-amber-100">
+                        <label className="text-xs font-bold text-amber-800 uppercase tracking-wide flex items-center justify-between mb-2">
+                            📌 Hızlı Notlar
+                            <button
+                                onClick={async () => {
+                                    if (!patient.notes && !localNotes && !isEditingNotes) {
+                                        setIsEditingNotes(true);
+                                        return;
+                                    }
 
+                                    if (isEditingNotes) {
+                                        // Check if changed
+                                        if (localNotes !== patient.notes) {
+                                            const { error } = await updatePatient(patient.id, { notes: localNotes });
+                                            if (!error) {
+                                                toast({ type: 'success', message: 'Not kaydedildi' });
+                                                fetchData();
+                                                setIsEditingNotes(false);
+                                            } else {
+                                                toast({ type: 'error', message: 'Hata oluştu' });
+                                            }
+                                        } else {
+                                            setIsEditingNotes(false);
+                                        }
+                                    } else {
+                                        setIsEditingNotes(true);
+                                    }
+                                }}
+                                className="text-amber-600 hover:text-amber-800 p-1 rounded hover:bg-amber-100 transition"
+                                title="Notu Düzenle/Kaydet"
+                            >
+                                {isEditingNotes ? <Save size={14} /> : <Edit size={14} />}
+                            </button>
+                        </label>
+                        {isEditingNotes ? (
+                            <textarea
+                                className="w-full text-sm p-2 bg-white border border-amber-200 rounded focus:outline-none focus:border-amber-400 text-gray-700 min-h-[60px]"
+                                value={localNotes}
+                                onChange={(e) => setLocalNotes(e.target.value)}
+                                placeholder="Hasta hakkında özel notlar..."
+                                autoFocus
+                            />
+                        ) : (
+                            <p
+                                className="text-sm text-gray-700 whitespace-pre-wrap cursor-pointer hover:opacity-80 transition"
+                                onClick={() => setIsEditingNotes(true)}
+                            >
+                                {patient.notes || <span className="text-gray-400 italic">Not eklemek için tıklayın...</span>}
+                            </p>
+                        )}
                     </div>
 
                     {patient.anamnez && (

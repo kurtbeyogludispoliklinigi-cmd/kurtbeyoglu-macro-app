@@ -10,9 +10,11 @@ export interface Appointment {
     appointment_date: string;
     duration_minutes: number;
     notes: string;
-    status: 'scheduled' | 'completed' | 'cancelled' | 'no-show';
+    status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled' | 'no-show';
     created_at: string;
     updated_at: string;
+    actual_start_time?: string;
+    actual_end_time?: string;
     // Joined fields
     patient_name?: string;
     doctor_name?: string;

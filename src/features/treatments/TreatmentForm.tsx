@@ -33,14 +33,19 @@ export function TreatmentForm({
   setLoading
 }: TreatmentFormProps) {
   // Treatment catalog integration
+  // Treatment catalog integration
   const {
     lookupTreatment,
     addToCatalog,
     calculateDiscount,
-    getAutocompleteSuggestions
+    getAutocompleteSuggestions,
+    packages // GET PACKAGES
   } = useTreatmentCatalog();
 
   // Form state
+  const [inputType, setInputType] = useState<'single' | 'package'>('single');
+  const [selectedPackageId, setSelectedPackageId] = useState<string>('');
+
   const [formData, setFormData] = useState({
     toothNo: '',
     procedure: '',
@@ -69,10 +74,10 @@ export function TreatmentForm({
   const [showNewTreatmentWarning, setShowNewTreatmentWarning] = useState(false);
   const [showOdontogram, setShowOdontogram] = useState(false);
 
-  // Debounced treatment lookup
+  // Debounced treatment lookup (Single Mode only)
   useEffect(() => {
     // Skip if no patient selected (though component usually returns null late, good safety)
-    if (!selectedPatientId) return;
+    if (!selectedPatientId || inputType === 'package') return;
 
     if (!formData.procedure || formData.procedure.length < 3) {
       setPriceSuggestion({ isNew: true, standardPrice: null });
@@ -105,11 +110,11 @@ export function TreatmentForm({
     }, 500); // 500ms debounce
 
     return () => clearTimeout(timer);
-  }, [formData.procedure, formData.cost, lookupTreatment, selectedPatientId]);
+  }, [formData.procedure, formData.cost, lookupTreatment, selectedPatientId, inputType]);
 
   // Calculate discount info
   const discountInfo = useMemo(() => {
-    if (!priceSuggestion.standardPrice || !formData.cost) return null;
+    if (!priceSuggestion.standardPrice || !formData.cost || inputType === 'package') return null;
 
     const paidAmount = Number(formData.cost);
     const standardPrice = priceSuggestion.standardPrice;
@@ -117,12 +122,16 @@ export function TreatmentForm({
     if (paidAmount >= standardPrice) return null;
 
     return calculateDiscount(standardPrice, paidAmount);
-  }, [priceSuggestion.standardPrice, formData.cost, calculateDiscount]);
+  }, [priceSuggestion.standardPrice, formData.cost, calculateDiscount, inputType]);
 
   // Null check for selectedPatientId - MOVED AFTER HOOKS
   if (!selectedPatientId) {
     return null;
   }
+
+  const selectedPackage = useMemo(() =>
+    packages.find(p => p.id === selectedPackageId),
+    [packages, selectedPackageId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,63 +140,65 @@ export function TreatmentForm({
     setLoading(true);
 
     try {
-      // If new treatment, add to catalog first
-      if (priceSuggestion.isNew && formData.procedure && formData.cost) {
-        const catalogResult = await addToCatalog(
-          formData.procedure,
-          Number(formData.cost),
-          undefined, // category - can be added later
-          currentUser.name
-        );
+      const itemsToInsert: any[] = [];
 
-        if (!catalogResult.success) {
-          console.warn('Failed to add to catalog:', catalogResult.error);
-          // Continue anyway - catalog is a nice-to-have feature
-        }
-      }
-
-      // Prepare notes with discount info if applicable
-      let finalNotes = formData.notes;
-      if (discountInfo) {
-        finalNotes = formData.notes
-          ? `${formData.notes} [${discountInfo.discountNote}]`
-          : `[${discountInfo.discountNote}]`;
-      }
-
-      // Prepare treatment data with status fields
-      interface TreatmentData {
-        patient_id: string;
-        tooth_no: string;
-        procedure: string;
-        cost: number;
-        notes: string;
-        added_by: string;
-        status: 'planned' | 'completed';
-        planned_date?: string;
-        planned_by?: string;
-        completed_date?: string;
-      }
-
-      const treatmentData: TreatmentData = {
-        patient_id: selectedPatientId,
-        tooth_no: formData.toothNo,
-        procedure: formData.procedure,
-        cost: Number(formData.cost) || 0,
-        notes: finalNotes,
-        added_by: currentUser.name,
-        status: treatmentMode
-      };
-
-      // Add mode-specific fields
-      if (treatmentMode === 'planned') {
-        treatmentData.planned_date = plannedDate;
-        treatmentData.planned_by = currentUser.name;
+      if (inputType === 'package' && selectedPackage) {
+        // PACKAGE MODE
+        selectedPackage.items.forEach((item: any) => {
+          itemsToInsert.push({
+            patient_id: selectedPatientId,
+            tooth_no: formData.toothNo, // Use the same tooth no for all
+            procedure: item.procedure,
+            cost: item.cost,
+            notes: formData.notes ? `${formData.notes} (Paket: ${selectedPackage.name})` : `(Paket: ${selectedPackage.name})`,
+            added_by: currentUser.name,
+            status: treatmentMode,
+            planned_date: treatmentMode === 'planned' ? plannedDate : undefined,
+            planned_by: treatmentMode === 'planned' ? currentUser.name : undefined,
+            completed_date: treatmentMode === 'completed' ? new Date().toISOString() : undefined,
+          });
+        });
       } else {
-        treatmentData.completed_date = new Date().toISOString();
+        // SINGLE MODE
+        // If new treatment, add to catalog first
+        if (priceSuggestion.isNew && formData.procedure && formData.cost) {
+          const catalogResult = await addToCatalog(
+            formData.procedure,
+            Number(formData.cost),
+            undefined, // category - can be added later
+            currentUser.name
+          );
+
+          if (!catalogResult.success) {
+            console.warn('Failed to add to catalog:', catalogResult.error);
+            // Continue anyway - catalog is a nice-to-have feature
+          }
+        }
+
+        // Prepare notes with discount info if applicable
+        let finalNotes = formData.notes;
+        if (discountInfo) {
+          finalNotes = formData.notes
+            ? `${formData.notes} [${discountInfo.discountNote}]`
+            : `[${discountInfo.discountNote}]`;
+        }
+
+        itemsToInsert.push({
+          patient_id: selectedPatientId,
+          tooth_no: formData.toothNo,
+          procedure: formData.procedure,
+          cost: Number(formData.cost) || 0,
+          notes: finalNotes,
+          added_by: currentUser.name,
+          status: treatmentMode,
+          planned_date: treatmentMode === 'planned' ? plannedDate : undefined,
+          planned_by: treatmentMode === 'planned' ? currentUser.name : undefined,
+          completed_date: treatmentMode === 'completed' ? new Date().toISOString() : undefined,
+        });
       }
 
-      // Insert treatment
-      const { error } = await supabase.from('treatments').insert(treatmentData);
+      // Bulk Insert
+      const { error } = await supabase.from('treatments').insert(itemsToInsert);
 
       if (error) throw error;
 
@@ -204,12 +215,14 @@ export function TreatmentForm({
       setTreatmentMode('completed');
       setPlannedDate(new Date().toISOString().split('T')[0]);
 
-      setPlannedDate(new Date().toISOString().split('T')[0]);
+      // Keep inputType but reset package selection
+      setSelectedPackageId('');
 
+      // Log activity (just log one for now or loop)
       await logActivity(currentUser as Doctor, 'CREATE_TREATMENT', {
         patient_id: selectedPatientId,
-        procedure: formData.procedure,
-        cost: Number(formData.cost),
+        procedure: inputType === 'package' ? `Paket: ${selectedPackage?.name}` : formData.procedure,
+        cost: inputType === 'package' ? selectedPackage?.items.reduce((acc: number, i: any) => acc + i.cost, 0) : Number(formData.cost),
         status: treatmentMode
       });
 
@@ -229,6 +242,26 @@ export function TreatmentForm({
         </div>
         Yeni İşlem Ekle
       </h3>
+
+      {/* Input Type Selection (Single vs Package) */}
+      <div className="flex gap-4 mb-4 border-b border-gray-100 pb-2">
+        <button
+          type="button"
+          onClick={() => setInputType('single')}
+          className={`text-sm font-medium pb-2 transition-colors relative ${inputType === 'single' ? 'text-[#0e7490]' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          Tek İşlem
+          {inputType === 'single' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0e7490] rounded-t-full" />}
+        </button>
+        <button
+          type="button"
+          onClick={() => setInputType('package')}
+          className={`text-sm font-medium pb-2 transition-colors relative ${inputType === 'package' ? 'text-[#0e7490]' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          Paket İşlem
+          {inputType === 'package' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0e7490] rounded-t-full" />}
+        </button>
+      </div>
 
       {/* Treatment Mode Selection */}
       <div className="mb-4 flex flex-col md:flex-row gap-3 p-3 bg-gray-50 rounded-lg">
@@ -302,7 +335,7 @@ export function TreatmentForm({
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Tooth Number */}
+          {/* Tooth Number (ALWAYS VISIBLE) */}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">
               Diş No
@@ -318,57 +351,103 @@ export function TreatmentForm({
             />
           </div>
 
-          {/* Treatment Procedure with Autocomplete */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">
-              Yapılan İşlem
-            </label>
-            <input
-              type="text"
-              placeholder="Kanal Tedavisi"
-              required
-              list="treatment-suggestions"
-              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 outline-none transition-colors ${priceSuggestion.isNew
-                ? 'border-yellow-300 focus:ring-yellow-500 bg-yellow-50'
-                : 'border-green-300 focus:ring-green-500 bg-green-50'
-                }`}
-              value={formData.procedure}
-              onChange={(e) =>
-                setFormData({ ...formData, procedure: e.target.value })
-              }
-            />
-            <datalist id="treatment-suggestions">
-              {getAutocompleteSuggestions.map((suggestion) => (
-                <option
-                  key={suggestion.value}
-                  value={suggestion.value}
-                >
-                  {suggestion.price} ₺
-                </option>
-              ))}
-            </datalist>
-          </div>
+          {inputType === 'single' ? (
+            // SINGLE PROCEDURE MODE
+            <>
+              {/* Treatment Procedure with Autocomplete */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Yapılan İşlem
+                </label>
+                <input
+                  type="text"
+                  placeholder="Kanal Tedavisi"
+                  required
+                  list="treatment-suggestions"
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 outline-none transition-colors ${priceSuggestion.isNew
+                    ? 'border-yellow-300 focus:ring-yellow-500 bg-yellow-50'
+                    : 'border-green-300 focus:ring-green-500 bg-green-50'
+                    }`}
+                  value={formData.procedure}
+                  onChange={(e) =>
+                    setFormData({ ...formData, procedure: e.target.value })
+                  }
+                />
+                <datalist id="treatment-suggestions">
+                  {getAutocompleteSuggestions.map((suggestion) => (
+                    <option
+                      key={suggestion.value}
+                      value={suggestion.value}
+                    >
+                      {suggestion.price} ₺
+                    </option>
+                  ))}
+                </datalist>
+              </div>
 
-          {/* Cost */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">
-              Ücret (TL)
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none"
-              value={formData.cost}
-              onChange={(e) =>
-                setFormData({ ...formData, cost: e.target.value })
-              }
-            />
-          </div>
+              {/* Cost */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Ücret (TL)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none"
+                  value={formData.cost}
+                  onChange={(e) =>
+                    setFormData({ ...formData, cost: e.target.value })
+                  }
+                />
+              </div>
+            </>
+          ) : (
+            // PACKAGE MODE
+            <div className="md:col-span-2 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Paket Seçimi
+                </label>
+                <select
+                  value={selectedPackageId}
+                  onChange={(e) => setSelectedPackageId(e.target.value)}
+                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none bg-white"
+                  required
+                >
+                  <option value="">Paket Seçiniz...</option>
+                  {packages.map(pkg => (
+                    <option key={pkg.id} value={pkg.id}>
+                      {pkg.name} ({pkg.items.length} parça)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Package Preview */}
+              {selectedPackage && (
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2">Paket İçeriği:</h4>
+                  <ul className="space-y-1">
+                    {selectedPackage.items.map((item: any, idx: number) => (
+                      <li key={idx} className="flex justify-between text-sm text-gray-600">
+                        <span>• {item.procedure}</span>
+                        <span className="font-medium">{item.cost} ₺</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-3 pt-2 border-t border-gray-200 flex justify-between font-bold text-gray-800 text-sm">
+                    <span>Toplam</span>
+                    <span>{selectedPackage.items.reduce((acc: number, item: any) => acc + item.cost, 0)} ₺</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* New Treatment Warning */}
-        {showNewTreatmentWarning && formData.procedure.length >= 3 && (
+        {/* New Treatment Warning (Single Only) */}
+        {inputType === 'single' && showNewTreatmentWarning && formData.procedure.length >= 3 && (
           <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg">
             <p className="text-sm font-medium text-yellow-800 mb-2">
               ⚠️ Bu tedavi ilk kez kaydediliyor
@@ -380,8 +459,8 @@ export function TreatmentForm({
           </div>
         )}
 
-        {/* Price Comparison & Discount Info */}
-        {priceSuggestion.standardPrice &&
+        {/* Price Comparison & Discount Info (Single Only) */}
+        {inputType === 'single' && priceSuggestion.standardPrice &&
           formData.cost &&
           Number(formData.cost) !== priceSuggestion.standardPrice && (
             <div
@@ -416,7 +495,7 @@ export function TreatmentForm({
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="Detay..."
+              placeholder={inputType === 'package' ? "Paket için ortak not..." : "Detay..."}
               className="flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none"
               value={formData.notes}
               onChange={(e) =>
@@ -441,7 +520,7 @@ export function TreatmentForm({
             disabled={loading}
             className="w-full sm:w-auto bg-[#0e7490] text-white px-6 py-3 rounded-lg hover:bg-[#155e75] transition shadow-sm font-medium disabled:opacity-50 min-h-[44px]"
           >
-            {loading ? '...' : 'Kaydet'}
+            {loading ? '...' : (inputType === 'package' ? 'Paketi Kaydet' : 'Kaydet')}
           </button>
         </div>
       </form>

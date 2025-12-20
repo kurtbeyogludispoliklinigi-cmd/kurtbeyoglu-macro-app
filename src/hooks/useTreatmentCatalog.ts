@@ -180,8 +180,31 @@ export function useTreatmentCatalog() {
     }));
   }, [catalog]);
 
+  // --- PACKAGES SUPPORT ---
+  const [packages, setPackages] = useState<{ id: string; name: string; items: any[] }[]>([]);
+
+  const fetchPackages = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('treatment_packages')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      setPackages(data || []);
+    } catch (err) {
+      console.error('Failed to fetch packages:', err);
+    }
+  }, []);
+
+  // Fetch packages on mount
+  useEffect(() => {
+    fetchPackages();
+  }, [fetchPackages]);
+
   return {
     catalog,
+    packages, // Export packages
     loading,
     error,
     lookupTreatment,

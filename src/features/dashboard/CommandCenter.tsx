@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, User, ArrowRight } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, sanitizePhoneNumber } from '@/lib/utils';
 import { Patient } from '@/lib/types';
 
 interface CommandCenterProps {
@@ -25,6 +25,8 @@ export function CommandCenter({ isOpen, onClose, onSelectPatient, currentUserRol
         if (!query) return [];
 
         const lowerQuery = query.toLowerCase();
+        const sanitizedQuery = sanitizePhoneNumber(query);
+        const hasDigits = /\d/.test(query);
 
         // Commands
         const commands: CommandItem[] = [
@@ -34,7 +36,11 @@ export function CommandCenter({ isOpen, onClose, onSelectPatient, currentUserRol
 
         // Patients
         const matchedPatients: CommandItem[] = (patients || [])
-            .filter(p => p.name.toLowerCase().includes(lowerQuery) || p.phone?.includes(lowerQuery))
+            .filter(p => {
+                const nameMatch = p.name.toLowerCase().includes(lowerQuery);
+                const phoneMatch = hasDigits && p.phone && sanitizePhoneNumber(p.phone).includes(sanitizedQuery);
+                return nameMatch || phoneMatch;
+            })
             .slice(0, 5)
             .map(p => ({
                 type: 'patient' as const,

@@ -37,7 +37,7 @@ export function LoginForm({ users, loading, onLogin }: LoginFormProps) {
 
                 <div className="text-center mb-10">
                     <div className="w-24 h-24 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg border border-slate-100 p-2">
-                        <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+                        <img src="/logo.png" alt="Kurtbeyoğlu Diş Kliniği" className="h-24 w-auto mx-auto drop-shadow-lg" />
                     </div>
                     <h1 className="text-2xl font-bold text-slate-800 leading-tight mb-2">
                         Özel Kurtbeyoğlu<br />Ağız ve Diş Sağlığı Polikliniği

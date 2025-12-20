@@ -1,4 +1,5 @@
-// Patients Feature - Barrel Export
-export { AddPatientModal, EditPatientModal, DuplicateWarningModal } from './PatientModals';
 export * from './PatientList';
 export * from './PatientDetail';
+export * from './PatientModals';
+export * from './PatientProvider';
+export * from './PatientCreationContext';

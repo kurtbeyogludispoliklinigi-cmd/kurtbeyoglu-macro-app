@@ -1,3 +1,3 @@
-// Auth Feature - Barrel Export
-export { LoginForm } from './LoginForm';
-export { PasswordChangeModal } from './PasswordChangeModal';
+export * from './LoginForm';
+export * from './PasswordChangeModal';
+export * from './AuthProvider';

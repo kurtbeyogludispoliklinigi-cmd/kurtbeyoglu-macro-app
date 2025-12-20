@@ -12,48 +12,14 @@ import {
 import { motion } from 'framer-motion';
 import { ExportButtons } from '@/components/ReportExport';
 import { DailyAgenda } from './DailyAgenda';
+import { TreatmentRemindersWidget } from '@/features/treatments/TreatmentRemindersWidget';
 import { QuickPaymentWidget } from './QuickPaymentWidget';
 import { PaymentQuickAccess } from '@/features/payments/PaymentQuickAccess';
 import { supabase } from '@/lib/supabase';
 import { ActivityMonitor } from './ActivityMonitor';
 import { CommandCenter } from './CommandCenter';
 
-type DoctorRole = 'admin' | 'doctor' | 'banko' | 'asistan';
-type PaymentStatus = 'pending' | 'paid' | 'partial';
-
-interface Treatment {
-    id: string;
-    patient_id: string;
-    tooth_no: string;
-    procedure: string;
-    cost: number;
-    notes: string;
-    created_at: string;
-    added_by: string;
-    payment_status?: PaymentStatus;
-    payment_amount?: number;
-    payment_note?: string | null;
-}
-
-interface Patient {
-    id: string;
-    doctor_id: string;
-    doctor_name: string;
-    name: string;
-    phone: string;
-    anamnez: string;
-    updated_at: string;
-    created_at?: string;
-    assignment_type?: 'queue' | 'preference';
-    assignment_date?: string;
-}
-
-interface Doctor {
-    id: string;
-    name: string;
-    role: DoctorRole;
-    pin: string;
-}
+import { Treatment, Patient, Doctor, QueueData, DoctorRole } from '@/lib/types';
 
 interface DashboardProps {
     patients: Patient[];
@@ -62,13 +28,6 @@ interface DashboardProps {
     currentUser: Doctor;
     loading?: boolean;
     onSelectPatient?: (patientId: string) => void;
-}
-
-interface QueueData {
-    id: string;
-    date: string;
-    queue_order: string[];
-    current_index: number;
 }
 
 const COLORS = ['#0e7490', '#cca43b', '#0f172a', '#64748b']; // Cyan-700, Gold, Slate-900, Slate-500, '#8b5cf6', '#ec4899'];
@@ -230,6 +189,10 @@ export default function Dashboard({ patients, treatments, doctors, currentUser, 
         if (day !== 1) startOfWeek.setDate(now.getDate() - (day - 1));
         startOfWeek.setHours(0, 0, 0, 0);
 
+        // Helper to calculate revenue for a specific date range
+        const calculateRevenue = (items: Treatment[]) => items.reduce((sum, t) => sum + (t.cost || 0), 0);
+
+        // Current Periods
         const monthlyTreatments = filteredTreatments.filter(t => {
             const date = new Date(t.created_at);
             return date.getMonth() === thisMonth && date.getFullYear() === thisYear;
@@ -245,10 +208,35 @@ export default function Dashboard({ patients, treatments, doctors, currentUser, 
             return date.toDateString() === todayStr;
         });
 
-        const totalRevenue = filteredTreatments.reduce((sum, t) => sum + (t.cost || 0), 0);
-        const monthlyRevenue = monthlyTreatments.reduce((sum, t) => sum + (t.cost || 0), 0);
-        const weeklyRevenue = weeklyTreatments.reduce((sum, t) => sum + (t.cost || 0), 0);
-        const todayRevenue = todayTreatments.reduce((sum, t) => sum + (t.cost || 0), 0);
+        // PREVIOUS PERIODS for Trends
+        // 1. Yesterday
+        const yesterdayStr = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toDateString();
+        const yesterdayRevenue = calculateRevenue(filteredTreatments.filter(t =>
+            new Date(t.created_at).toDateString() === yesterdayStr
+        ));
+
+        // 2. Last Week
+        const lastWeekStart = new Date(startOfWeek);
+        lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+        const lastWeekEnd = new Date(startOfWeek); // Up to start of this week
+        const lastWeekRevenue = calculateRevenue(filteredTreatments.filter(t => {
+            const d = new Date(t.created_at);
+            return d >= lastWeekStart && d < lastWeekEnd;
+        }));
+
+        // 3. Last Month
+        const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const lastMonthIdx = lastMonthDate.getMonth();
+        const lastMonthRevenue = calculateRevenue(filteredTreatments.filter(t =>
+            new Date(t.created_at).getMonth() === lastMonthIdx &&
+            new Date(t.created_at).getFullYear() === lastMonthDate.getFullYear()
+        ));
+
+        // Basic Metrics
+        const totalRevenue = calculateRevenue(filteredTreatments);
+        const monthlyRevenue = calculateRevenue(monthlyTreatments);
+        const weeklyRevenue = calculateRevenue(weeklyTreatments);
+        const todayRevenue = calculateRevenue(todayTreatments);
 
         const pendingAmount = filteredTreatments.reduce((sum, t) => {
             if (t.payment_status === 'paid') return sum;
@@ -256,6 +244,12 @@ export default function Dashboard({ patients, treatments, doctors, currentUser, 
             const paid = t.payment_amount || 0;
             return sum + (cost - paid);
         }, 0);
+
+        // Trend Calculation Helper
+        const calcTrend = (current: number, previous: number) => {
+            if (previous === 0) return current > 0 ? 100 : 0;
+            return ((current - previous) / previous) * 100;
+        };
 
         return {
             totalPatients: filteredPatients.length,
@@ -265,7 +259,12 @@ export default function Dashboard({ patients, treatments, doctors, currentUser, 
             monthlyRevenue,
             weeklyRevenue,
             todayRevenue,
-            pendingAmount
+            pendingAmount,
+            trends: {
+                daily: calcTrend(todayRevenue, yesterdayRevenue),
+                weekly: calcTrend(weeklyRevenue, lastWeekRevenue),
+                monthly: calcTrend(monthlyRevenue, lastMonthRevenue)
+            }
         };
     }, [filteredPatients, filteredTreatments]);
 
@@ -383,40 +382,61 @@ export default function Dashboard({ patients, treatments, doctors, currentUser, 
                     title="Bugün Ciro"
                     value={`${stats.todayRevenue.toLocaleString('tr-TR')} ₺`}
                     subValue={`${new Date().toLocaleDateString('tr-TR', { weekday: 'long' })}`}
+                    trend={{
+                        value: stats.trends.daily,
+                        label: 'düne göre',
+                        positive: stats.trends.daily >= 0
+                    }}
                 />
                 <StatCard
                     icon={TrendingUp}
                     title="Bu Hafta"
                     value={`${stats.weeklyRevenue.toLocaleString('tr-TR')} ₺`}
+                    trend={{
+                        value: stats.trends.weekly,
+                        label: 'geçen haftaya göre',
+                        positive: stats.trends.weekly >= 0
+                    }}
                 />
                 <StatCard
                     icon={Wallet}
                     title="Bu Ay"
                     value={`${stats.monthlyRevenue.toLocaleString('tr-TR')} ₺`}
+                    trend={{
+                        value: stats.trends.monthly,
+                        label: 'geçen aya göre',
+                        positive: stats.trends.monthly >= 0
+                    }}
                 />
                 <StatCard
                     icon={RotateCcw}
-                    title="Bekleyen Alacak"
-                    value={`${stats.pendingAmount.toLocaleString('tr-TR')} ₺`}
-                    subValue="Tahsil edilecek"
-                    color="text-red-500"
+                    title="Tahsilat Oranı"
+                    value={`%${((stats.monthlyRevenue / (stats.monthlyRevenue + stats.pendingAmount || 1)) * 100).toFixed(0)}`}
+                    subValue={`Toplam: ${(stats.monthlyRevenue + stats.pendingAmount).toLocaleString('tr-TR')} ₺`}
+                    color="text-emerald-600"
+                    trend={{
+                        value: stats.pendingAmount,
+                        label: 'bekleyen alacak',
+                        positive: false, // Invert meaning: High pending is bad
+                        isCurrency: true
+                    }}
                 />
 
                 {/* Secondary Stats Row */}
                 <StatCard
                     icon={Users}
                     title="Toplam Hasta"
-                    value={stats.totalPatients}
+                    value={stats.totalPatients.toLocaleString()}
                 />
                 <StatCard
                     icon={ClipboardList}
                     title="Toplam İşlem"
-                    value={stats.totalTreatments}
+                    value={stats.totalTreatments.toLocaleString()}
                 />
                 <StatCard
                     icon={Calendar}
                     title="Bu Ay İşlem"
-                    value={stats.monthlyTreatments}
+                    value={stats.monthlyTreatments.toLocaleString()}
                 />
                 <StatCard
                     icon={Wallet}
@@ -429,6 +449,13 @@ export default function Dashboard({ patients, treatments, doctors, currentUser, 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-1 h-full">
                     <DailyAgenda currentUser={currentUser} />
+                </div>
+                <div className="lg:col-span-1 h-full">
+                    <TreatmentRemindersWidget
+                        treatments={treatments}
+                        patients={patients}
+                        currentUser={currentUser}
+                    />
                 </div>
                 <div className="lg:col-span-1 h-full">
                     <QuickPaymentWidget
@@ -775,21 +802,43 @@ interface StatCardProps {
     value: string | number;
     subValue?: string;
     color?: string;
+    trend?: {
+        value: number;
+        label: string;
+        positive: boolean;
+        isCurrency?: boolean;
+    };
 }
 
-function StatCard({ icon: Icon, title, value, subValue, color }: StatCardProps) {
+function StatCard({ icon: Icon, title, value, subValue, color, trend }: StatCardProps) {
     return (
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-lg transition-all relative overflow-hidden group">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-lg transition-all relative overflow-hidden group">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#0e7490] to-[#cca43b] opacity-80" />
-            <div className="flex items-center justify-between mb-2">
-                <div>
-                    <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider">{title}</p>
-                    <h3 className={`text-2xl font-bold mt-1 ${color ? color : 'text-slate-800 dark:text-gray-100'}`}>{value}</h3>
-                    {subValue && <p className="text-xs text-[#cca43b] font-medium mt-1">{subValue}</p>}
+            <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl group-hover:bg-[#0e7490]/10 transition-colors">
+                    <Icon className="text-[#0e7490] dark:text-[#cca43b]" size={24} />
                 </div>
-                <div className="p-3 bg-slate-50 rounded-xl group-hover:bg-[#0e7490]/5 transition-colors">
-                    <Icon className="text-[#0e7490]" size={24} />
-                </div>
+                {trend && (
+                    <div className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${trend.positive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                        <span>{trend.positive ? '↑' : '↓'}</span>
+                        <span>
+                            {trend.isCurrency
+                                ? `${trend.value.toLocaleString('tr-TR')} ₺`
+                                : `${Math.abs(trend.value).toFixed(0)}%`
+                            }
+                        </span>
+                    </div>
+                )}
+            </div>
+
+            <div>
+                <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider mb-1">{title}</p>
+                <h3 className={`text-2xl font-bold ${color ? color : 'text-slate-800 dark:text-gray-100'}`}>{value}</h3>
+                {(subValue || trend) && (
+                    <p className="text-xs text-slate-400 dark:text-slate-500 font-medium mt-2 flex items-center gap-1">
+                        {trend ? trend.label : subValue}
+                    </p>
+                )}
             </div>
         </div>
     );

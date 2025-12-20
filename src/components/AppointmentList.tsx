@@ -14,7 +14,7 @@ interface AppointmentListProps {
     onEdit: (appointment: Appointment) => void;
     onDelete: (id: string) => void;
     onStatusChange: (id: string, status: Appointment['status']) => void;
-    onAddNew: () => void;
+    onAddNew: (date?: Date) => void;
     selectedDate: Date;
     onDateChange: (date: Date) => void;
     loading?: boolean;
@@ -104,7 +104,7 @@ export function AppointmentList({
                             </button>
                         </div>
                         <button
-                            onClick={onAddNew}
+                            onClick={() => onAddNew()}
                             className="flex items-center gap-1 px-3 py-1.5 bg-[#0e7490] text-white rounded-lg hover:bg-[#155e75] transition text-sm font-medium"
                         >
                             <Plus size={16} /> Yeni
@@ -168,7 +168,7 @@ export function AppointmentList({
                         <Calendar size={48} className="mx-auto mb-3 opacity-50" />
                         <p>Bu gün için randevu yok.</p>
                         <button
-                            onClick={onAddNew}
+                            onClick={() => onAddNew()}
                             className="mt-3 text-[#0e7490] hover:text-[#155e75] font-medium text-sm"
                         >
                             + Randevu Ekle
@@ -180,6 +180,8 @@ export function AppointmentList({
                             appointments={appointments}
                             onEdit={onEdit}
                             onStatusChange={onStatusChange}
+                            onAddNew={onAddNew}
+                            selectedDate={selectedDate}
                         />
                     </div>
                 ) : (

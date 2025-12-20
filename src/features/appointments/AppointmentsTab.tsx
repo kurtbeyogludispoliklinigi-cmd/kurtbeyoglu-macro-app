@@ -16,6 +16,7 @@ interface AppointmentsTabProps {
 export function AppointmentsTab({ currentUser, patients, selectedDate, onDateChange, toast }: AppointmentsTabProps) {
     const [showModal, setShowModal] = useState(false);
     const [editingApt, setEditingApt] = useState<Appointment | null>(null);
+    const [preselectedDate, setPreselectedDate] = useState<Date | null>(null);
 
     const {
         appointments,
@@ -59,7 +60,18 @@ export function AppointmentsTab({ currentUser, patients, selectedDate, onDateCha
     };
 
     const handleStatusChange = async (id: string, status: Appointment['status']) => {
-        const result = await updateAppointment(id, { status });
+        const updateData: Partial<Appointment> = { status };
+
+        // Duration Tracking Logic
+        const now = new Date().toISOString();
+
+        if (status === 'in-progress') {
+            updateData.actual_start_time = now;
+        } else if (status === 'completed') {
+            updateData.actual_end_time = now;
+        }
+
+        const result = await updateAppointment(id, updateData);
         if (result.success) {
             toast({ type: 'success', message: 'Durum güncellendi!' });
         }
@@ -72,14 +84,18 @@ export function AppointmentsTab({ currentUser, patients, selectedDate, onDateCha
                 onEdit={(apt) => { setEditingApt(apt); setShowModal(true); }}
                 onDelete={handleDelete}
                 onStatusChange={handleStatusChange}
-                onAddNew={() => { setEditingApt(null); setShowModal(true); }}
+                onAddNew={(date) => {
+                    setEditingApt(null);
+                    setPreselectedDate(date || null);
+                    setShowModal(true);
+                }}
                 selectedDate={selectedDate}
                 onDateChange={onDateChange}
                 loading={loading}
             />
             <AppointmentModal
                 isOpen={showModal}
-                onClose={() => { setShowModal(false); setEditingApt(null); }}
+                onClose={() => { setShowModal(false); setEditingApt(null); setPreselectedDate(null); }}
                 onSave={handleSave}
                 patients={patients}
                 doctorId={currentUser.id}
@@ -91,6 +107,7 @@ export function AppointmentsTab({ currentUser, patients, selectedDate, onDateCha
                     notes: editingApt.notes,
                     status: editingApt.status,
                 } : undefined}
+                defaultDate={preselectedDate || selectedDate}
             />
         </>
     );
