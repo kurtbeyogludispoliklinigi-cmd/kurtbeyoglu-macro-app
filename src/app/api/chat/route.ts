@@ -36,7 +36,7 @@ export async function POST(req: Request) {
         }
 
         const result = await streamText({
-            model: google('gemini-2.0-flash-lite'),
+            model: google('gemini-1.5-flash'),
             messages,
             system: `Sen 'DentistNote Pro' diş kliniği yönetim sisteminin yapay zeka asistanısın. 
     Kullanıcıya nazik, profesyonel ve yardımcı bir dille cevap ver. 
