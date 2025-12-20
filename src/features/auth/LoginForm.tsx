@@ -83,7 +83,7 @@ export function LoginForm({ users, loading, onLogin }: LoginFormProps) {
                         </label>
                         <input
                             type="password"
-                            className="w-full p-4 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-[#0e7490]/20 focus:border-[#0e7490] outline-none text-center tracking-[0.5em] text-xl font-bold text-slate-800 shadow-sm transition-all placeholder:tracking-normal placeholder:font-normal"
+                            className="w-full p-4 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-[#0e7490]/20 focus:border-[#0e7490] outline-none text-center tracking-[0.5em] text-xl font-bold text-slate-900 shadow-sm transition-all placeholder:tracking-normal placeholder:font-normal placeholder:text-slate-400"
                             placeholder="PIN"
                             value={loginPin}
                             onChange={(e) => setLoginPin(e.target.value)}

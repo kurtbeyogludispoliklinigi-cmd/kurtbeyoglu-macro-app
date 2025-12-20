@@ -297,7 +297,7 @@ export function TreatmentForm({
             type="date"
             value={plannedDate}
             onChange={(e) => setPlannedDate(e.target.value)}
-            className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+            className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900"
             required
           />
         </div>
@@ -343,7 +343,7 @@ export function TreatmentForm({
             <input
               type="text"
               placeholder="16"
-              className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none"
+              className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none text-gray-900 placeholder:text-gray-400"
               value={formData.toothNo}
               onChange={(e) =>
                 setFormData({ ...formData, toothNo: e.target.value })
@@ -364,7 +364,7 @@ export function TreatmentForm({
                   placeholder="Kanal Tedavisi"
                   required
                   list="treatment-suggestions"
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 outline-none transition-colors ${priceSuggestion.isNew
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 outline-none transition-colors text-gray-900 placeholder:text-gray-400 ${priceSuggestion.isNew
                     ? 'border-yellow-300 focus:ring-yellow-500 bg-yellow-50'
                     : 'border-green-300 focus:ring-green-500 bg-green-50'
                     }`}
@@ -394,7 +394,7 @@ export function TreatmentForm({
                   type="number"
                   step="0.01"
                   placeholder="0.00"
-                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none"
+                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none text-gray-900 placeholder:text-gray-400"
                   value={formData.cost}
                   onChange={(e) =>
                     setFormData({ ...formData, cost: e.target.value })
@@ -412,7 +412,7 @@ export function TreatmentForm({
                 <select
                   value={selectedPackageId}
                   onChange={(e) => setSelectedPackageId(e.target.value)}
-                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none bg-white"
+                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none bg-white text-gray-900"
                   required
                 >
                   <option value="">Paket Seçiniz...</option>
@@ -496,7 +496,7 @@ export function TreatmentForm({
             <input
               type="text"
               placeholder={inputType === 'package' ? "Paket için ortak not..." : "Detay..."}
-              className="flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none"
+              className="flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#0e7490] outline-none text-gray-900 placeholder:text-gray-400"
               value={formData.notes}
               onChange={(e) =>
                 setFormData({ ...formData, notes: e.target.value })

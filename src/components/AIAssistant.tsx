@@ -238,7 +238,7 @@ export default function AIAssistant() {
                                 value={input ?? ''}
                                 onChange={handleInputChange}
                                 placeholder="Bir soru sorun..."
-                                className="flex-1 bg-gray-100 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                className="flex-1 bg-gray-100 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 placeholder:text-gray-500"
                             />
                             <button
                                 type="submit"
