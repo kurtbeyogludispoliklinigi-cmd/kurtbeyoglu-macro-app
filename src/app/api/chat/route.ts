@@ -30,8 +30,11 @@ export async function POST(req: Request) {
         if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
             console.error('GOOGLE_GENERATIVE_AI_API_KEY is not set');
             return new Response(
-                JSON.stringify({ error: 'API key not configured' }),
-                { status: 500, headers: { 'Content-Type': 'application/json' } }
+                JSON.stringify({
+                    error: 'API Anahtarı Eksik',
+                    details: 'Sistem yöneticisi Vercel panelinden GOOGLE_GENERATIVE_AI_API_KEY tanımlamalıdır.'
+                }),
+                { status: 503, headers: { 'Content-Type': 'application/json' } }
             );
         }
 

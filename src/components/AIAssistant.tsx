@@ -61,7 +61,7 @@ export default function AIAssistant() {
             {/* Floating Button */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="fixed bottom-6 right-6 p-4 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-full shadow-lg hover:shadow-xl transition transform hover:scale-105 z-50 flex items-center gap-2"
+                className="fixed bottom-40 md:bottom-6 right-6 p-4 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-full shadow-lg hover:shadow-xl transition transform hover:scale-105 z-50 flex items-center gap-2"
             >
                 {isOpen ? <X size={24} /> : <MessageSquare size={24} />}
                 {!isOpen && <span className="font-semibold px-1">Asistan</span>}
@@ -69,7 +69,7 @@ export default function AIAssistant() {
 
             {/* Chat Window */}
             {isOpen && (
-                <div className="fixed bottom-24 right-6 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col z-50 overflow-hidden animate-in slide-in-from-bottom-5 duration-300" style={{ height: '500px' }}>
+                <div className="fixed bottom-60 md:bottom-24 right-6 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col z-50 overflow-hidden animate-in slide-in-from-bottom-5 duration-300" style={{ height: '500px' }}>
 
                     {/* Header */}
                     <div className="bg-gradient-to-r from-teal-600 to-emerald-600 p-4 flex items-center gap-2 text-white">
@@ -130,7 +130,12 @@ export default function AIAssistant() {
                         {error && (
                             <div className="flex items-center gap-2 text-red-500 text-xs p-2 bg-red-50 rounded">
                                 <AlertCircle size={14} />
-                                <span>Bir hata oluştu. API anahtarını kontrol edin.</span>
+                                <span>
+                                    {/* Try to parse error message if it's JSON string or default fallback */}
+                                    {error.message?.includes('{')
+                                        ? JSON.parse(error.message).details || 'Bir hata oluştu.'
+                                        : 'Yapay zeka servisine ulaşılamıyor (API Key eksik olabilir).'}
+                                </span>
                             </div>
                         )}
 
