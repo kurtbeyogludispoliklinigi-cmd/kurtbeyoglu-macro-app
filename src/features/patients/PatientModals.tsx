@@ -57,7 +57,7 @@ export function AddPatientModal({
                             type="text"
                             required
                             placeholder="Ad Soyad"
-                            className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none"
+                            className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none text-gray-900 bg-white"
                             value={newPatient.name}
                             onChange={e => setNewPatient({ ...newPatient, name: e.target.value })}
                         />
@@ -69,7 +69,7 @@ export function AddPatientModal({
                             type="tel"
                             placeholder="(5XX) XXX XX XX"
                             required
-                            className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none"
+                            className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none text-gray-900 bg-white"
                             value={newPatient.phone}
                             onChange={e => setNewPatient({ ...newPatient, phone: formatPhoneNumber(e.target.value) })}
                         />
@@ -91,7 +91,7 @@ export function AddPatientModal({
                             <div className="relative">
                                 <textarea
                                     placeholder="Anamnez..."
-                                    className="w-full p-3 pr-12 border border-red-200 bg-red-50 rounded-lg text-base focus:ring-2 focus:ring-red-300 outline-none"
+                                    className="w-full p-3 pr-12 border border-red-200 bg-red-50 rounded-lg text-base focus:ring-2 focus:ring-red-300 outline-none text-gray-900"
                                     rows={3}
                                     value={newPatient.anamnez}
                                     onChange={e => setNewPatient({ ...newPatient, anamnez: e.target.value })}
@@ -158,7 +158,7 @@ export function EditPatientModal({
                             type="text"
                             required
                             placeholder="Ad Soyad"
-                            className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none"
+                            className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none text-gray-900 bg-white"
                             value={editingPatient.name}
                             onChange={e => setEditingPatient({ ...editingPatient, name: e.target.value })}
                         />
@@ -170,7 +170,7 @@ export function EditPatientModal({
                             type="tel"
                             placeholder="(5XX) XXX XX XX"
                             required
-                            className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none"
+                            className="w-full p-3 border rounded-lg text-base focus:ring-2 focus:ring-teal-500 outline-none text-gray-900 bg-white"
                             value={editingPatient.phone || ''}
                             onChange={e => setEditingPatient({ ...editingPatient, phone: formatPhoneNumber(e.target.value) })}
                         />
@@ -182,7 +182,7 @@ export function EditPatientModal({
                         <div className="relative">
                             <textarea
                                 placeholder="Anamnez..."
-                                className="w-full p-3 pr-12 border border-red-200 bg-red-50 rounded-lg text-base focus:ring-2 focus:ring-red-300 outline-none"
+                                className="w-full p-3 pr-12 border border-red-200 bg-red-50 rounded-lg text-base focus:ring-2 focus:ring-red-300 outline-none text-gray-900"
                                 rows={3}
                                 value={editingPatient.anamnez || ''}
                                 onChange={e => setEditingPatient({ ...editingPatient, anamnez: e.target.value })}

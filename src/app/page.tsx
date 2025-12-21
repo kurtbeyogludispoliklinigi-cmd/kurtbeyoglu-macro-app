@@ -425,7 +425,7 @@ function DentalClinicApp() {
             {showMobileSidebar ? <X size={20} /> : <Menu size={20} />}
           </button>
           <div className="text-center flex-1">
-            <h1 className="font-bold text-sm">Özel Kurtbeyoğlu Polikliniği</h1>
+            <h1 className="font-bold text-sm">Özel Kurtbeyoğlu Ağız ve Diş Sağlığı Polikliniği</h1>
             <p className="text-xs opacity-80">{currentUser.name}</p>
           </div>
           <div className="flex gap-1">
@@ -460,10 +460,10 @@ function DentalClinicApp() {
         <div className="hidden md:flex p-6 text-white justify-between items-center shadow-sm bg-[#0f172a]">
           <div>
             <h1 className="font-bold text-lg flex items-center gap-3">
-              <img src="/logo.png" alt="Kurtbeyoğlu Diş Kliniği" className="h-10 w-auto rounded-lg bg-white p-1 object-contain" />
+              <img src="/logo.png" alt="Özel Kurtbeyoğlu Ağız ve Diş Sağlığı Polikliniği" className="h-10 w-auto rounded-lg bg-white p-1 object-contain" />
               <div className="flex flex-col">
                 <span className="text-sm font-semibold text-slate-100">{currentUser.name}</span>
-                <span className="text-[10px] font-medium text-[#cca43b] uppercase tracking-wide">Özel Kurtbeyoğlu Polikliniği</span>
+                <span className="text-[10px] font-medium text-[#cca43b] uppercase tracking-wide">Özel Kurtbeyoğlu Ağız ve Diş Sağlığı Polikliniği</span>
               </div>
             </h1>
           </div>

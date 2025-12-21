@@ -6,13 +6,16 @@ import { useState, useRef, useEffect } from 'react';
 import { MessageSquare, X, Send, Sparkles, AlertCircle, Mic, Paperclip } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { AIConfirmationCards } from './AIConfirmationCards';
 
 function cn(...inputs: (string | undefined | null | false)[]) {
     return twMerge(clsx(inputs));
 }
 
 export default function AIAssistant() {
-    const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat();
+    const { messages, input, handleInputChange, handleSubmit, isLoading, error, addToolResult } = useChat({
+        maxSteps: 5, // Allow multi-step interactions (e.g. tool call -> confirmation -> response)
+    });
     const [isOpen, setIsOpen] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
     const [files, setFiles] = useState<FileList | undefined>(undefined);
@@ -123,6 +126,33 @@ export default function AIAssistant() {
                                         </div>
                                     ))}
                                     {m.content}
+
+                                    {/* Tool Invocations (Confirmation Cards) */}
+                                    {m.toolInvocations?.map((toolInvocation: any) => {
+                                        const toolCallId = toolInvocation.toolCallId;
+
+                                        // Only show confirmation card if result is NOT yet added
+                                        if (!('result' in toolInvocation)) {
+                                            return (
+                                                <div key={toolCallId} className="mt-2">
+                                                    <AIConfirmationCards
+                                                        toolInvocation={toolInvocation}
+                                                        onConfirm={(id, result) => addToolResult({ toolCallId: id, result })}
+                                                        onCancel={(id) => addToolResult({ toolCallId: id, result: 'Kullanıcı işlemi iptal etti.' })}
+                                                    />
+                                                </div>
+                                            );
+                                        }
+
+                                        // If result exists, show a small summary
+                                        return (
+                                            <div key={toolCallId} className="mt-2 text-xs bg-gray-50 border rounded p-2 text-gray-500">
+                                                {toolInvocation.toolName === 'createPatient' && '✅ Hasta kartı işlemi tamamlandı.'}
+                                                {toolInvocation.toolName === 'createAppointment' && '✅ Randevu işlemi tamamlandı.'}
+                                                {toolInvocation.toolName === 'createTreatment' && '✅ Tedavi işlemi tamamlandı.'}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         ))}

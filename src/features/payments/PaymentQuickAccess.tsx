@@ -212,7 +212,7 @@ export function PaymentQuickAccess({
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     autoFocus
-                                    className="w-full pl-12 pr-4 py-4 rounded-xl border dark:border-slate-600 bg-gray-50 dark:bg-slate-700 focus:ring-2 focus:ring-teal-500 outline-none text-lg"
+                                    className="w-full pl-12 pr-4 py-4 rounded-xl border dark:border-slate-600 bg-gray-50 dark:bg-slate-700 focus:ring-2 focus:ring-teal-500 outline-none text-lg text-gray-900 dark:text-gray-100"
                                 />
                             </div>
 
@@ -327,7 +327,7 @@ export function PaymentQuickAccess({
                                                 value={note}
                                                 onChange={(e) => setNote(e.target.value)}
                                                 placeholder="Örn: Ön ödeme, Kapora vb."
-                                                className="w-full p-3 border rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 outline-none focus:ring-2 focus:ring-teal-500"
+                                                className="w-full p-3 border rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 dark:text-gray-100"
                                             />
                                         </div>
                                     </div>
@@ -351,7 +351,7 @@ export function PaymentQuickAccess({
                                                     type="number"
                                                     value={amount}
                                                     onChange={(e) => setAmount(e.target.value)}
-                                                    className="w-full pl-8 p-3 border rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 text-lg font-bold outline-none focus:ring-2 focus:ring-teal-500"
+                                                    className="w-full pl-8 p-3 border rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 text-lg font-bold outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 dark:text-gray-100"
                                                     placeholder="0.00"
                                                     step="0.01"
                                                     min="0"
