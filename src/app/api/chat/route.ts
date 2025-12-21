@@ -44,6 +44,10 @@ export async function POST(req: Request) {
                         phone: z.string().describe('Hastanın telefon numarası (5 ile başlamalı). Örn: 5321234567'),
                         anamnez: z.string().optional().describe('Varsa hastanın şikayeti veya hikayesi'),
                     }),
+                    execute: async ({ name, phone, anamnez }) => {
+                        console.log('createPatient call:', { name, phone, anamnez });
+                        return { name, phone, anamnez, status: 'pending_confirmation' };
+                    },
                 }),
                 createAppointment: tool({
                     description: 'Randevu oluşturmak için kullanılır.',
@@ -53,6 +57,10 @@ export async function POST(req: Request) {
                         time: z.string().describe('Randevu saati (HH:MM)'),
                         notes: z.string().optional().describe('Randevu notu'),
                     }),
+                    execute: async ({ patientName, date, time, notes }) => {
+                        console.log('createAppointment call:', { patientName, date, time, notes });
+                        return { patientName, date, time, notes, status: 'pending_confirmation' };
+                    },
                 }),
                 createTreatment: tool({
                     description: 'Yapılan bir tedaviyi veya işlemin ücretini girmek için kullanılır.',
@@ -63,6 +71,10 @@ export async function POST(req: Request) {
                         toothNo: z.string().optional().describe('Varsa diş numarası'),
                         notes: z.string().optional().describe('İşlem notları'),
                     }),
+                    execute: async ({ patientName, procedure, cost, toothNo, notes }) => {
+                        console.log('createTreatment call:', { patientName, procedure, cost, toothNo, notes });
+                        return { patientName, procedure, cost, toothNo, notes, status: 'pending_confirmation' };
+                    },
                 }),
             },
         });
