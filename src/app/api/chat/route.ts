@@ -21,7 +21,28 @@ export async function POST(req: Request) {
             );
         }
 
-        const result = await streamText({
+        const createPatientSchema = z.object({
+            name: z.string().describe('Hastanın adı ve soyadı'),
+            phone: z.string().describe('Hastanın telefon numarası (5 ile başlamalı). Örn: 5321234567'),
+            anamnez: z.string().optional().describe('Varsa hastanın şikayeti veya hikayesi'),
+        });
+
+        const createAppointmentSchema = z.object({
+            patientName: z.string().describe('Randevu alınacak hastanın adı'),
+            date: z.string().describe('Randevu tarihi (YYYY-MM-DD formatında)'),
+            time: z.string().describe('Randevu saati (HH:MM)'),
+            notes: z.string().optional().describe('Randevu notu'),
+        });
+
+        const createTreatmentSchema = z.object({
+            patientName: z.string().describe('İşlem yapılan hasta adı'),
+            procedure: z.string().describe('Yapılan işlem (Kanal, Dolgu vb.)'),
+            cost: z.number().describe('İşlem ücreti (TL)'),
+            toothNo: z.string().optional().describe('Varsa diş numarası'),
+            notes: z.string().optional().describe('İşlem notları'),
+        });
+
+        const result = streamText({
             model: google('gemini-2.0-flash-exp'),
             messages,
             system: `Sen 'Özel Kurtbeyoğlu Ağız ve Diş Sağlığı Polikliniği' klinik yönetim sisteminin süper zeki yapay zeka asistanısın. 
@@ -39,11 +60,7 @@ export async function POST(req: Request) {
             tools: {
                 createPatient: tool({
                     description: 'Yeni bir hasta kartı oluşturmak için kullanılır. İsim ve telefon zorunludur.',
-                    parameters: z.object({
-                        name: z.string().describe('Hastanın adı ve soyadı'),
-                        phone: z.string().describe('Hastanın telefon numarası (5 ile başlamalı). Örn: 5321234567'),
-                        anamnez: z.string().optional().describe('Varsa hastanın şikayeti veya hikayesi'),
-                    }),
+                    inputSchema: createPatientSchema,
                     execute: async ({ name, phone, anamnez }) => {
                         console.log('createPatient call:', { name, phone, anamnez });
                         return { name, phone, anamnez, status: 'pending_confirmation' };
@@ -51,12 +68,7 @@ export async function POST(req: Request) {
                 }),
                 createAppointment: tool({
                     description: 'Randevu oluşturmak için kullanılır.',
-                    parameters: z.object({
-                        patientName: z.string().describe('Randevu alınacak hastanın adı'),
-                        date: z.string().describe('Randevu tarihi (YYYY-MM-DD formatında)'),
-                        time: z.string().describe('Randevu saati (HH:MM)'),
-                        notes: z.string().optional().describe('Randevu notu'),
-                    }),
+                    inputSchema: createAppointmentSchema,
                     execute: async ({ patientName, date, time, notes }) => {
                         console.log('createAppointment call:', { patientName, date, time, notes });
                         return { patientName, date, time, notes, status: 'pending_confirmation' };
@@ -64,13 +76,7 @@ export async function POST(req: Request) {
                 }),
                 createTreatment: tool({
                     description: 'Yapılan bir tedaviyi veya işlemin ücretini girmek için kullanılır.',
-                    parameters: z.object({
-                        patientName: z.string().describe('İşlem yapılan hasta adı'),
-                        procedure: z.string().describe('Yapılan işlem (Kanal, Dolgu vb.)'),
-                        cost: z.number().describe('İşlem ücreti (TL)'),
-                        toothNo: z.string().optional().describe('Varsa diş numarası'),
-                        notes: z.string().optional().describe('İşlem notları'),
-                    }),
+                    inputSchema: createTreatmentSchema,
                     execute: async ({ patientName, procedure, cost, toothNo, notes }) => {
                         console.log('createTreatment call:', { patientName, procedure, cost, toothNo, notes });
                         return { patientName, procedure, cost, toothNo, notes, status: 'pending_confirmation' };
@@ -79,7 +85,7 @@ export async function POST(req: Request) {
             },
         });
 
-        return result.toDataStreamResponse();
+        return result.toUIMessageStreamResponse();
     } catch (error: any) {
         console.error('AI Error:', error);
         return new Response(JSON.stringify({ error: error.message }), { status: 500 });
