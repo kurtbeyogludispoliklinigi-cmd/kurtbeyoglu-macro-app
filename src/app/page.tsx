@@ -228,7 +228,7 @@ function DentalClinicApp() {
 
     // Search filtering
     list = list.filter((p: Patient) =>
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.name.toLocaleLowerCase('tr-TR').includes(searchTerm.toLocaleLowerCase('tr-TR')) ||
       (p.phone && (
         p.phone.includes(searchTerm) ||
         p.phone.replace(/\D/g, '').includes(searchTerm.replace(/\D/g, ''))
