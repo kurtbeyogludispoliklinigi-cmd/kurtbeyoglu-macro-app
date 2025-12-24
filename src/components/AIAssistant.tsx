@@ -158,14 +158,22 @@ export default function AIAssistant() {
                         ))}
 
                         {error && (
-                            <div className="flex items-center gap-2 text-red-500 text-xs p-2 bg-red-50 rounded">
-                                <AlertCircle size={14} />
-                                <span>
-                                    {/* Try to parse error message if it's JSON string or default fallback */}
-                                    {error.message?.includes('{')
-                                        ? JSON.parse(error.message).details || 'Bir hata oluştu.'
-                                        : 'Yapay zeka servisine ulaşılamıyor (API Key eksik olabilir).'}
-                                </span>
+                            <div className="flex flex-col gap-2 text-red-500 text-xs p-3 bg-red-50 rounded-lg border border-red-200">
+                                <div className="flex items-center gap-2 font-semibold">
+                                    <AlertCircle size={14} />
+                                    <span>Bağlantı Hatası</span>
+                                </div>
+                                <p className="text-gray-700">
+                                    {error.message?.includes('API')
+                                        ? 'Sistem yöneticisi Gemini API anahtarını kontrol etmelidir.'
+                                        : error.message || 'Yapay zeka servisine ulaşılamıyor.'}
+                                </p>
+                                <button
+                                    onClick={() => window.location.reload()}
+                                    className="text-xs bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 self-start"
+                                >
+                                    Sayfayı Yenile
+                                </button>
                             </div>
                         )}
 
@@ -266,14 +274,24 @@ export default function AIAssistant() {
 
                             <input
                                 type="text"
-                                inputMode="text"
-                                autoComplete="off"
-                                autoCorrect="off"
-                                spellCheck={false}
+                                autoComplete="on"
+                                autoCorrect="on"
+                                autoCapitalize="sentences"
+                                spellCheck={true}
                                 value={input ?? ''}
                                 onChange={handleInputChange}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey && !isLoading) {
+                                        e.preventDefault();
+                                        if ((input ?? '').trim() || (files && files.length > 0)) {
+                                            const form = e.currentTarget.form;
+                                            if (form) form.requestSubmit();
+                                        }
+                                    }
+                                }}
                                 placeholder="Bir soru sorun..."
-                                className="flex-1 bg-gray-100 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 placeholder:text-gray-500"
+                                className="flex-1 bg-gray-100 rounded-full px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 placeholder:text-gray-500"
+                                disabled={isLoading}
                             />
                             <button
                                 type="submit"

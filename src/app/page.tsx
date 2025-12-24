@@ -226,14 +226,27 @@ function DentalClinicApp() {
       list = list.filter((p: Patient) => p.doctor_id === currentUser.id);
     }
 
-    // Search filtering
-    list = list.filter((p: Patient) =>
-      p.name.toLocaleLowerCase('tr-TR').includes(searchTerm.toLocaleLowerCase('tr-TR')) ||
-      (p.phone && (
-        p.phone.includes(searchTerm) ||
-        p.phone.replace(/\D/g, '').includes(searchTerm.replace(/\D/g, ''))
-      ))
-    );
+    // Search filtering (enhanced with TC and date)
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLocaleLowerCase('tr-TR');
+      list = list.filter((p: Patient) => {
+        // Name search
+        if (p.name.toLocaleLowerCase('tr-TR').includes(term)) return true;
+        // Phone search
+        if (p.phone && (
+          p.phone.includes(searchTerm) ||
+          p.phone.replace(/\D/g, '').includes(searchTerm.replace(/\D/g, ''))
+        )) return true;
+        // TC number search
+        if (p.tc_no && p.tc_no.includes(searchTerm)) return true;
+        // Date search (assignment_date)
+        if (p.assignment_date) {
+          const dateStr = new Date(p.assignment_date).toLocaleDateString('tr-TR');
+          if (dateStr.includes(term)) return true;
+        }
+        return false;
+      });
+    }
 
     // Date filtering (only for users who can see all patients)
     if (dateFilter !== 'all' && currentUser && hasPermission.viewAllPatients(currentUser.role)) {
