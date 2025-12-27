@@ -7,7 +7,8 @@ import { useActivityLogger } from '@/hooks/useActivityLogger';
 import { hasPermission } from '@/lib/permissions';
 import { sanitizePhoneNumber, isValidPhoneNumber, getLocalDateString, formatPhoneNumber } from '@/lib/utils';
 import { AddPatientModal, DuplicateWarningModal } from './PatientModals';
-import { DoctorSelectionModal } from '@/features/queue'; // Assuming exported
+import { PatientSaveConfirmation, PatientSaveConfirmationData } from './PatientSaveConfirmation';
+import { DoctorSelectionModal } from '@/features/queue';
 import { Patient } from '@/lib/types';
 
 interface PatientCreationContextType {
@@ -32,12 +33,23 @@ export function PatientCreationProvider({ children }: { children: React.ReactNod
     const [duplicatePatients, setDuplicatePatients] = useState<Patient[]>([]);
     const [proceedWithDuplicate, setProceedWithDuplicate] = useState(false);
 
+    // NEW: Confirmation modal state
+    const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
+    const [pendingPatientData, setPendingPatientData] = useState<{
+        doctorId: string;
+        doctorName: string;
+        assignmentType: 'queue' | 'preference';
+        name: string;
+        phone: string;
+        anamnez: string;
+    } | null>(null);
+
     const [newPatient, setNewPatient] = useState({ name: '', phone: '', anamnez: '' });
     const [selectedDoctorForPatient, setSelectedDoctorForPatient] = useState('');
     const [assignmentMethod, setAssignmentMethod] = useState<'manual' | 'queue' | null>(null);
     const [loading, setLoading] = useState(false);
 
-    // Track consecutive queue assignments (local to this provider now)
+    // Track consecutive queue assignments
     const [recentQueueAssignments, setRecentQueueAssignments] = useState<{
         doctorId: string;
         doctorName: string;
@@ -51,7 +63,7 @@ export function PatientCreationProvider({ children }: { children: React.ReactNod
 
     const openCreateModal = () => {
         if (currentUser && (currentUser.role === 'banko' || currentUser.role === 'asistan')) {
-            initializeQueue(); // Re-init queue when opening
+            initializeQueue();
             setShowDoctorSelectionModal(true);
         } else {
             setShowAddPatientModal(true);
@@ -61,6 +73,8 @@ export function PatientCreationProvider({ children }: { children: React.ReactNod
     const closeCreateModal = () => {
         setShowAddPatientModal(false);
         setShowDoctorSelectionModal(false);
+        setShowSaveConfirmation(false);
+        setPendingPatientData(null);
         setNewPatient({ name: '', phone: '', anamnez: '' });
         setSelectedDoctorForPatient('');
         setAssignmentMethod(null);
@@ -86,6 +100,7 @@ export function PatientCreationProvider({ children }: { children: React.ReactNod
         }
     };
 
+    // Step 1: Validate and show confirmation modal
     const handleAddPatient = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!currentUser) return;
@@ -146,25 +161,62 @@ export function PatientCreationProvider({ children }: { children: React.ReactNod
                             duration: 5000
                         });
                     }
-
-                    setRecentQueueAssignments(prev => [
-                        ...prev.slice(-4),
-                        { doctorId, doctorName, timestamp: Date.now() }
-                    ]);
                 }
             }
 
-            setLoading(true);
+            // Store pending data and show confirmation modal
+            setPendingPatientData({
+                doctorId,
+                doctorName,
+                assignmentType,
+                name: trimmedName,
+                phone: cleanedPhone,
+                anamnez: hasPermission.editAnamnez(currentUser.role) ? newPatient.anamnez : ''
+            });
+            setShowAddPatientModal(false);
+            setShowSaveConfirmation(true);
+
+        } catch (error) {
+            console.error('Patient add error:', error);
+            toast({ type: 'error', message: 'Kayıt yapılamadı.' });
+        }
+    };
+
+    // Step 2: Actually save the patient after confirmation
+    const handleConfirmedSave = async (confirmationData: PatientSaveConfirmationData) => {
+        if (!currentUser || !pendingPatientData) return;
+
+        setLoading(true);
+        try {
+            const { doctorId, doctorName, assignmentType, name, phone, anamnez } = pendingPatientData;
+
+            // Track queue assignments
+            if ((currentUser.role === 'banko' || currentUser.role === 'asistan') && assignmentType === 'queue') {
+                setRecentQueueAssignments(prev => [
+                    ...prev.slice(-4),
+                    { doctorId, doctorName, timestamp: Date.now() }
+                ]);
+            }
+
             const { data, error } = await addPatient({
                 doctor_id: doctorId,
                 doctor_name: doctorName,
-                name: trimmedName,
-                phone: cleanedPhone,
-                anamnez: hasPermission.editAnamnez(currentUser.role) ? newPatient.anamnez : '',
+                name,
+                phone,
+                anamnez,
                 assignment_type: assignmentType,
                 assignment_date: getLocalDateString(),
                 created_by: currentUser.id,
-                created_by_name: currentUser.name
+                created_by_name: currentUser.name,
+                // Store confirmation data as notes/metadata
+                notes: confirmationData.hasTreatments || confirmationData.hasAppointment || confirmationData.hasMedication || confirmationData.treatmentDoneToday
+                    ? [
+                        confirmationData.hasTreatments ? `📋 Planlanan tedavi: ${confirmationData.treatmentNotes}` : '',
+                        confirmationData.hasAppointment ? `📅 Randevu: ${new Date(confirmationData.appointmentDate).toLocaleDateString('tr-TR')}` : '',
+                        confirmationData.hasMedication ? `💊 İlaç: ${confirmationData.medicationNotes}` : '',
+                        confirmationData.treatmentDoneToday ? '✅ Bugün tedavi yapıldı' : ''
+                    ].filter(Boolean).join('\n')
+                    : ''
             });
 
             if (error) throw error;
@@ -172,11 +224,10 @@ export function PatientCreationProvider({ children }: { children: React.ReactNod
             if (data) {
                 await logActivity(currentUser, 'CREATE_PATIENT', {
                     patient_id: data.id,
-                    name: trimmedName,
-                    doctor_name: doctorName
+                    name,
+                    doctor_name: doctorName,
+                    confirmation: confirmationData
                 });
-                // We might want to select the patient in the main list, but that state is in page.tsx
-                // For now we just add it. If we need to select it, we might need a callback or global selection context.
             }
 
             closeCreateModal();
@@ -196,7 +247,7 @@ export function PatientCreationProvider({ children }: { children: React.ReactNod
         <PatientCreationContext.Provider value={{
             openCreateModal,
             closeCreateModal,
-            isCreationModalOpen: showAddPatientModal || showDoctorSelectionModal
+            isCreationModalOpen: showAddPatientModal || showDoctorSelectionModal || showSaveConfirmation
         }}>
             {children}
 
@@ -222,29 +273,30 @@ export function PatientCreationProvider({ children }: { children: React.ReactNod
                 canSave={canSaveNewPatient}
             />
 
+            {/* NEW: Save Confirmation Modal */}
+            {showSaveConfirmation && (
+                <PatientSaveConfirmation
+                    onConfirm={handleConfirmedSave}
+                    onCancel={() => {
+                        setShowSaveConfirmation(false);
+                        setShowAddPatientModal(true); // Go back to form
+                    }}
+                />
+            )}
+
             <DuplicateWarningModal
                 isOpen={showDuplicateWarning}
                 onClose={() => { setShowDuplicateWarning(false); setProceedWithDuplicate(false); }}
                 duplicatePatients={duplicatePatients}
                 onSelectPatient={(p) => {
-                    // Logic to select existing patient. 
-                    // This needs to update page.tsx selection. 
-                    // Maybe we should just close and show toast "Go to patient"?
                     setShowDuplicateWarning(false);
                     toast({ type: 'info', message: 'Mevcut hasta seçildi.' });
                 }}
                 onProceedAnyway={() => {
                     setProceedWithDuplicate(true);
                     setShowDuplicateWarning(false);
-                    // Trigger logic again - we can just call handleAddPatient again, but state upd needs a re-render or effect?
-                    // In page.tsx it used setTimeout to re-submit form.
-                    // Here we can just call handleAddPatient directly? No, event object needed.
-                    // We'll set state and if handleAddPatient checks it...
-                    // We need to re-trigger.
-                    // Simpler: Just setProceedWithDuplicate(true) and let user click Save again?
-                    // Or automate it.
                     setTimeout(() => {
-                        const form = document.querySelector('form[data-patient-form]'); // Need to add this attr to AddPatientModal form
+                        const form = document.querySelector('form[data-patient-form]');
                         if (form) form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
                     }, 100);
                 }}

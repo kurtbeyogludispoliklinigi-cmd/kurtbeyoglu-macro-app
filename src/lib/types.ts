@@ -30,6 +30,7 @@ export interface Patient {
     treatments?: Treatment[];
     created_by?: string;
     created_by_name?: string;
+    tc_no?: string; // Turkish ID number (11 digits)
 }
 
 export interface Treatment {
