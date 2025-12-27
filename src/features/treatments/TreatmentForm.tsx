@@ -53,11 +53,15 @@ export function TreatmentForm({
     notes: ''
   });
 
-  // Treatment mode state
-  const [treatmentMode, setTreatmentMode] = useState<'planned' | 'completed'>('completed');
+  // Treatment mode state - DEFAULT CHANGED TO PLANNED
+  const [treatmentMode, setTreatmentMode] = useState<'planned' | 'completed'>('planned');
   const [plannedDate, setPlannedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
+
+  // Confirmation Dialog State
+  const [confirmationStep, setConfirmationStep] = useState<'none' | 'planned-details' | 'completed-followup'>('none');
+  const [followUpNeeded, setFollowUpNeeded] = useState(false);
 
   // Catalog state
   const [priceSuggestion, setPriceSuggestion] = useState<{
@@ -133,14 +137,40 @@ export function TreatmentForm({
     packages.find(p => p.id === selectedPackageId),
     [packages, selectedPackageId]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // PRE-SUBMIT HANDLER (Intercepts and asks questions)
+  const handlePreSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Basic validation
     if (!currentUser || !selectedPatientId) return;
+    if (inputType === 'single' && (!formData.procedure || !formData.cost)) {
+      onError('Lütfen işlem ve ücret giriniz.');
+      return;
+    }
+    if (inputType === 'package' && !selectedPackageId) {
+      onError('Lütfen paket seçiniz.');
+      return;
+    }
 
+    // Open Confirmation Dialog based on Mode
+    if (treatmentMode === 'planned') {
+      setConfirmationStep('planned-details');
+    } else {
+      setConfirmationStep('completed-followup');
+    }
+  };
+
+  // ACTUAL SUBMIT HANDLER
+  const performSave = async () => {
     setLoading(true);
 
     try {
       const itemsToInsert: any[] = [];
+
+      // Append follow-up note if needed
+      let finalNotesBase = formData.notes;
+      if (treatmentMode === 'completed' && followUpNeeded) {
+        finalNotesBase += ' (Kontrol randevusu gerekli)';
+      }
 
       if (inputType === 'package' && selectedPackage) {
         // PACKAGE MODE
@@ -150,7 +180,7 @@ export function TreatmentForm({
             tooth_no: formData.toothNo, // Use the same tooth no for all
             procedure: item.procedure,
             cost: item.cost,
-            notes: formData.notes ? `${formData.notes} (Paket: ${selectedPackage.name})` : `(Paket: ${selectedPackage.name})`,
+            notes: finalNotesBase ? `${finalNotesBase} (Paket: ${selectedPackage.name})` : `(Paket: ${selectedPackage.name})`,
             added_by: currentUser.name,
             status: treatmentMode,
             planned_date: treatmentMode === 'planned' ? plannedDate : undefined,
@@ -171,15 +201,14 @@ export function TreatmentForm({
 
           if (!catalogResult.success) {
             console.warn('Failed to add to catalog:', catalogResult.error);
-            // Continue anyway - catalog is a nice-to-have feature
           }
         }
 
         // Prepare notes with discount info if applicable
-        let finalNotes = formData.notes;
+        let finalNotes = finalNotesBase;
         if (discountInfo) {
-          finalNotes = formData.notes
-            ? `${formData.notes} [${discountInfo.discountNote}]`
+          finalNotes = finalNotes
+            ? `${finalNotes} [${discountInfo.discountNote}]`
             : `[${discountInfo.discountNote}]`;
         }
 
@@ -212,8 +241,14 @@ export function TreatmentForm({
       setFormData({ toothNo: '', procedure: '', cost: '', notes: '' });
       setPriceSuggestion({ isNew: true, standardPrice: null });
       setShowNewTreatmentWarning(false);
-      setTreatmentMode('completed');
+
+      // Keep mode as 'planned' default
+      setTreatmentMode('planned');
       setPlannedDate(new Date().toISOString().split('T')[0]);
+
+      // Reset confirmation
+      setConfirmationStep('none');
+      setFollowUpNeeded(false);
 
       // Keep inputType but reset package selection
       setSelectedPackageId('');
@@ -235,13 +270,91 @@ export function TreatmentForm({
   };
 
   return (
-    <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border mb-6">
+    <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border mb-6 relative">
       <h3 className="text-base md:text-lg font-semibold text-gray-700 mb-4 flex items-center gap-2">
         <div className="bg-[#0e7490]/10 p-1.5 rounded text-[#0e7490]">
           <Plus size={18} />
         </div>
         Yeni İşlem Ekle
       </h3>
+
+      {/* CONFIRMATION OVERLAY */}
+      {confirmationStep !== 'none' && (
+        <div className="absolute inset-0 z-50 bg-white/95 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in-95 duration-200">
+          {confirmationStep === 'planned-details' && (
+            <div className="space-y-4 max-w-sm w-full">
+              <div className="text-4xl mb-2">📅</div>
+              <h4 className="text-xl font-bold text-blue-800">Planlamayı Netleştirin</h4>
+              <p className="text-gray-600 text-sm">Bu tedavi ne zaman uygulanacak?</p>
+
+              <div className="text-left bg-blue-50 p-4 rounded-lg border border-blue-100">
+                <label className="block text-xs font-bold text-blue-700 mb-1">Hedef Tarih</label>
+                <input
+                  type="date"
+                  value={plannedDate}
+                  onChange={(e) => setPlannedDate(e.target.value)}
+                  className="w-full px-3 py-2 border rounded font-medium text-lg text-center"
+                  required
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => setConfirmationStep('none')}
+                  className="flex-1 py-3 text-gray-500 hover:bg-gray-100 rounded-lg font-medium"
+                >
+                  Vazgeç
+                </button>
+                <button
+                  onClick={performSave}
+                  className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow-lg shadow-blue-600/20"
+                >
+                  Planı Kaydet
+                </button>
+              </div>
+            </div>
+          )}
+
+          {confirmationStep === 'completed-followup' && (
+            <div className="space-y-4 max-w-sm w-full">
+              <div className="text-4xl mb-2">✅</div>
+              <h4 className="text-xl font-bold text-teal-800">İşlem Tamamlandı</h4>
+              <p className="text-gray-600 text-sm">Hasta bu tedavi için tekrar gelecek mi?</p>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setFollowUpNeeded(false)}
+                  className={`p-3 rounded-xl border-2 transition ${!followUpNeeded ? 'border-teal-600 bg-teal-50 text-teal-800 font-bold' : 'border-gray-200 bg-white text-gray-500'}`}
+                >
+                  Hayır, Bitti
+                </button>
+                <button
+                  onClick={() => setFollowUpNeeded(true)}
+                  className={`p-3 rounded-xl border-2 transition ${followUpNeeded ? 'border-amber-500 bg-amber-50 text-amber-800 font-bold' : 'border-gray-200 bg-white text-gray-500'}`}
+                >
+                  Evet, Gelecek
+                </button>
+              </div>
+
+              <div className="flex gap-2 pt-4">
+                <button
+                  onClick={() => setConfirmationStep('none')}
+                  className="flex-1 py-3 text-gray-500 hover:bg-gray-100 rounded-lg font-medium"
+                >
+                  Düzelt
+                </button>
+                <button
+                  onClick={performSave}
+                  className="flex-1 py-3 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700 shadow-lg shadow-teal-600/20"
+                >
+                  {followUpNeeded ? 'Kaydet ve Randevu Planla' : 'Kaydet ve Bitir'}
+                </button>
+              </div>
+              {followUpNeeded && <p className="text-xs text-amber-600 italic">Kaydettikten sonra randevu takvimine yönlendirileceksiniz.</p>}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Input Type Selection (Single vs Package) */}
       <div className="flex gap-4 mb-4 border-b border-gray-100 pb-2">
@@ -267,16 +380,6 @@ export function TreatmentForm({
       <div className="mb-4 flex flex-col md:flex-row gap-3 p-3 bg-gray-50 rounded-lg">
         <button
           type="button"
-          onClick={() => setTreatmentMode('completed')}
-          className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${treatmentMode === 'completed'
-            ? 'bg-[#0e7490] text-white shadow'
-            : 'bg-white text-gray-600 hover:bg-gray-100'
-            }`}
-        >
-          ✓ Yapılan İşlem
-        </button>
-        <button
-          type="button"
           onClick={() => setTreatmentMode('planned')}
           className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${treatmentMode === 'planned'
             ? 'bg-blue-600 text-white shadow'
@@ -285,23 +388,23 @@ export function TreatmentForm({
         >
           📅 Planlanan İşlem
         </button>
+        <button
+          type="button"
+          onClick={() => setTreatmentMode('completed')}
+          className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${treatmentMode === 'completed'
+            ? 'bg-[#0e7490] text-white shadow'
+            : 'bg-white text-gray-600 hover:bg-gray-100'
+            }`}
+        >
+          ✓ Yapılan İşlem
+        </button>
       </div>
 
-      {/* Planned Date Field (conditional) */}
-      {treatmentMode === 'planned' && (
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <label className="block text-xs font-semibold text-blue-700 mb-1">
-            Planlanan Tarih
-          </label>
-          <input
-            type="date"
-            value={plannedDate}
-            onChange={(e) => setPlannedDate(e.target.value)}
-            className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900"
-            required
-          />
-        </div>
-      )}
+      {/* Planned Date Field (conditional) - HIDDEN HERE, SHOWN IN CONFIRMATION */}
+      {/* 
+        We hide the direct date input here to simplify the initial form 
+        and move it to the confirmation step which is more "interview mode".
+      */}
 
       {/* Odontogram Toggle */}
       <div className="mb-4">
@@ -333,7 +436,7 @@ export function TreatmentForm({
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handlePreSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Tooth Number (ALWAYS VISIBLE) */}
           <div>
@@ -520,7 +623,7 @@ export function TreatmentForm({
             disabled={loading}
             className="w-full sm:w-auto bg-[#0e7490] text-white px-6 py-3 rounded-lg hover:bg-[#155e75] transition shadow-sm font-medium disabled:opacity-50 min-h-[44px]"
           >
-            {loading ? '...' : (inputType === 'package' ? 'Paketi Kaydet' : 'Kaydet')}
+            {loading ? '...' : (treatmentMode === 'planned' ? 'Planlamayı Başlat' : 'Tamamla')}
           </button>
         </div>
       </form>

@@ -219,50 +219,70 @@ function DentalClinicApp() {
   }, [patients, treatments]);
 
   const filteredPatients = useMemo(() => {
-    let list = patientsWithTreatments;
+    let list = patientsWithTreatments ?? [];
 
-    // Role-based filtering
+    // Rol bazlı filtre: hekim sadece kendi hastalarını görsün
     if (currentUser && !hasPermission.viewAllPatients(currentUser.role)) {
       list = list.filter((p: Patient) => p.doctor_id === currentUser.id);
     }
 
-    // Search filtering
-    list = list.filter((p: Patient) =>
-      p.name.toLocaleLowerCase('tr-TR').includes(searchTerm.toLocaleLowerCase('tr-TR')) ||
-      (p.phone && (
-        p.phone.includes(searchTerm) ||
-        p.phone.replace(/\D/g, '').includes(searchTerm.replace(/\D/g, ''))
-      ))
-    );
+    // Arama yoksa direkt tarihe göre filtrele + sırala
+    const hasSearch = searchTerm.trim().length > 0;
 
-    // Date filtering (only for users who can see all patients)
+    if (hasSearch) {
+      const normalizedSearch = searchTerm
+        .toLocaleLowerCase('tr-TR')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const digits = searchTerm.replace(/\D/g, '');
+
+      list = list.filter((p: Patient) => {
+        const name = (p.name || '').toLocaleLowerCase('tr-TR');
+        const phone = p.phone || '';
+        const phoneDigits = phone.replace(/\D/g, '');
+
+        if (normalizedSearch && name.includes(normalizedSearch)) return true;
+        if (digits && phoneDigits.includes(digits)) return true;
+
+        return false;
+      });
+    }
+
+    // Tarih filtresi (sadece tüm hastaları görebilen roller için)
     if (dateFilter !== 'all' && currentUser && hasPermission.viewAllPatients(currentUser.role)) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
       list = list.filter((p: Patient) => {
-        if (!p.assignment_date) return false;
+        if (!p.assignment_date) return true;
         const assignDate = new Date(p.assignment_date);
         assignDate.setHours(0, 0, 0, 0);
 
         switch (dateFilter) {
           case 'today':
             return assignDate.getTime() === today.getTime();
-          case 'yesterday':
+          case 'yesterday': {
             const yesterday = new Date(today);
             yesterday.setDate(yesterday.getDate() - 1);
             return assignDate.getTime() === yesterday.getTime();
-          case 'week':
+          }
+          case 'week': {
             const weekAgo = new Date(today);
             weekAgo.setDate(weekAgo.getDate() - 7);
             return assignDate >= weekAgo;
+          }
           default:
             return true;
         }
       });
     }
 
-    return list;
+    // En son güncellenen en üstte olacak şekilde sırala
+    return list.sort((a, b) => {
+      const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+      const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+      return dateB - dateA;
+    });
   }, [patientsWithTreatments, searchTerm, currentUser, dateFilter]);
 
   const activePatient = patientsWithTreatments.find((p: Patient) => p.id === selectedPatientId);
@@ -577,12 +597,14 @@ function DentalClinicApp() {
 
             {/* New Patient Button */}
             <div className="flex gap-2">
-              <button
-                onClick={openCreateModal}
-                className="touch-target flex-1 bg-[#cca43b] text-[#0f172a] py-2.5 rounded-xl font-bold hover:bg-[#b59030] transition flex justify-center items-center gap-2 shadow-lg shadow-[#cca43b]/20 active:scale-[0.98] text-sm"
-              >
-                <Plus size={18} /> YENİ HASTA
-              </button>
+              {hasPermission.createPatient(currentUser.role) && (
+                <button
+                  onClick={openCreateModal}
+                  className="touch-target flex-1 bg-[#cca43b] text-[#0f172a] py-2.5 rounded-xl font-bold hover:bg-[#b59030] transition flex justify-center items-center gap-2 shadow-lg shadow-[#cca43b]/20 active:scale-[0.98] text-sm"
+                >
+                  <Plus size={18} /> YENİ HASTA
+                </button>
+              )}
               {hasPermission.addPayment(currentUser.role) && (
                 <button
                   onClick={() => setShowPaymentQuickAccess(true)}
@@ -698,6 +720,7 @@ function DentalClinicApp() {
               >
                 <Plus size={18} /> YENİ HASTA EKLE
               </button>
+              )}
             </div>
 
             {filteredPatients.length === 0 ? (

@@ -1,21 +1,7 @@
-import React from 'react';
-import { Phone } from 'lucide-react';
-import { Patient, Doctor, Treatment } from '@/lib/types';
-import { cn, formatPhoneNumber } from '@/lib/utils';
-import { hasPermission } from '@/lib/permissions';
-
-import { getPatientStatus } from './utils';
-
-interface PatientWithTreatments extends Patient {
-    treatments?: Treatment[];
-}
-
-interface PatientListProps {
-    patients: PatientWithTreatments[];
-    selectedPatientId: string | null;
-    onSelectPatient: (id: string) => void;
-    currentUser: Doctor;
-}
+// Helper to format currency
+const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(amount);
+};
 
 export function PatientList({
     patients,
@@ -36,67 +22,79 @@ export function PatientList({
             {patients.map(p => {
                 const status = getPatientStatus(p);
 
+                // RICH DATA CALCULATIONS
+                // 1. Last Visit: Based on last completed treatment date or updated_at
+                const lastTreatment = p.treatments?.filter(t => t.status === 'completed')
+                    .sort((a, b) => new Date(b.completed_date || 0).getTime() - new Date(a.completed_date || 0).getTime())[0];
+
+                const lastVisitDate = lastTreatment?.completed_date ? new Date(lastTreatment.completed_date) :
+                    (p.updated_at ? new Date(p.updated_at) : null);
+
+                // 2. Debt Calculation (Simple: Sum of non-paid completed treatments, or just total debt if we had payments)
+                // Since we don't have payments array here (only treatments), we'll estimate or just show "Borçlu" status.
+                // However, PatientWithTreatments interface usually implies we might have what we need. 
+                // Let's assume for now we show what we know. If 'debt' status, show visually.
+
+                // 3. Last Procedure Name
+                const lastProcedureName = lastTreatment?.treatment_name;
+
                 return (
                     <li
                         key={p.id}
                         onClick={() => onSelectPatient(p.id)}
                         className={cn(
-                            "p-4 border-b cursor-pointer hover:bg-teal-50 dark:hover:bg-slate-700 transition relative",
+                            "p-3 border-b cursor-pointer hover:bg-teal-50 dark:hover:bg-slate-700 transition relative group",
                             selectedPatientId === p.id && 'bg-teal-50 dark:bg-slate-700 border-l-4 border-l-teal-600',
-                            // Status Border (if not selected, showing status color)
+                            // Status Border
                             selectedPatientId !== p.id && status === 'debt' && 'border-l-4 border-l-red-500',
                             selectedPatientId !== p.id && status === 'planned' && 'border-l-4 border-l-blue-500',
                             selectedPatientId !== p.id && status === 'active' && 'border-l-4 border-l-transparent'
                         )}
                     >
                         <div className="flex justify-between items-start">
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <h3 className="font-semibold text-gray-800 dark:text-gray-100">{p.name}</h3>
-                                    {/* Mobile Status Badge (Visible on desktop too for clarity) */}
+                            <div className="flex-1 min-w-0"> {/* min-w-0 for text truncation */}
+                                <div className="flex items-center gap-2 mb-1">
+                                    <h3 className="font-bold text-gray-800 dark:text-gray-100 text-sm truncate">{p.name}</h3>
                                     {status === 'debt' && (
-                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                                            Borçlu
-                                        </span>
-                                    )}
-                                    {status === 'planned' && (
-                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                                            Planlı
+                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 whitespace-nowrap">
+                                            Borçlu: {formatCurrency((p.treatments?.reduce((sum, t) => sum + (t.cost || 0), 0) || 0) - (p.treatments?.reduce((sum, t) => sum + (t.payment_amount || 0), 0) || 0))}
                                         </span>
                                     )}
                                 </div>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-1">
-                                    <Phone size={12} /> {formatPhoneNumber(p.phone || '') || 'Tel yok'}
-                                </p>
-                                {hasPermission.viewAllPatients(currentUser.role) && (
-                                    <div className="flex flex-wrap gap-1.5 mt-1.5">
-                                        <span className="text-[10px] bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded">
-                                            Hekim: {p.doctor_name || 'Bilinmiyor'}
-                                        </span>
-                                        {p.assignment_type && (
-                                            <span className={cn(
-                                                "text-[10px] px-1.5 py-0.5 rounded font-medium",
-                                                p.assignment_type === 'queue'
-                                                    ? "bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300"
-                                                    : "bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300"
-                                            )}>
-                                                {p.assignment_type === 'queue' ? '🔄 Sıralı' : '⭐ Tercihli'}
-                                            </span>
-                                        )}
-                                        {p.assignment_date && (
-                                            <span className="text-[10px] bg-gray-100 dark:bg-slate-600 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded">
-                                                📅 {new Date(p.assignment_date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
-                                            </span>
+
+                                <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                                    {/* Row 1: Phone & Last Visit */}
+                                    <div className="flex items-center gap-1">
+                                        <Phone size={10} className="shrink-0" />
+                                        <span className="truncate">{formatPhoneNumber(p.phone || '')}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1 justify-end text-slate-400">
+                                        {lastVisitDate && (
+                                            <>
+                                                <span>Son:</span>
+                                                <span className="font-medium text-slate-600 dark:text-slate-300">
+                                                    {lastVisitDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'numeric', year: '2-digit' })}
+                                                </span>
+                                            </>
                                         )}
                                     </div>
-                                )}
-                            </div>
-                            <div className="text-right">
-                                {p.updated_at && (
-                                    <span className="text-xs bg-gray-100 dark:bg-slate-600 text-gray-500 dark:text-gray-300 px-2 py-1 rounded-full">
-                                        {new Date(p.updated_at).toLocaleDateString()}
-                                    </span>
-                                )}
+
+                                    {/* Row 2: Last Procedure (Full width or split) */}
+                                    {lastProcedureName && (
+                                        <div className="col-span-2 text-slate-600 dark:text-slate-400 truncate flex items-center gap-1 border-t border-slate-100 dark:border-slate-700 pt-1 mt-1">
+                                            <span className="italic opacity-80">İşlem:</span> {lastProcedureName}
+                                        </div>
+                                    )}
+
+                                    {/* Row 3: Admin/Banko info */}
+                                    {(currentUser.role === 'admin' || currentUser.role === 'banko') && (
+                                        <div className="col-span-2 mt-1">
+                                            <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1 rounded text-slate-500">
+                                                {p.doctor_name || '-'}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </li>

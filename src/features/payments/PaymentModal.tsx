@@ -6,6 +6,7 @@ import { Banknote, DollarSign } from 'lucide-react';
 import { Doctor, Patient } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
 import { useActivityLogger } from '@/hooks/useActivityLogger';
+import { hasPermission } from '@/lib/permissions';
 
 interface PaymentModalProps {
     isOpen: boolean;

@@ -13,14 +13,17 @@ function cn(...inputs: (string | undefined | null | false)[]) {
 }
 
 export default function AIAssistant() {
-    const { messages, input, handleInputChange, handleSubmit, isLoading, error, addToolResult } = useChat({
+    const { messages, sendMessage, status, error, addToolResult } = useChat({
         maxSteps: 5, // Allow multi-step interactions (e.g. tool call -> confirmation -> response)
     });
+    const [inputValue, setInputValue] = useState('');
     const [isOpen, setIsOpen] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
     const [files, setFiles] = useState<FileList | undefined>(undefined);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isListening, setIsListening] = useState(false);
+
+    const isLoading = status === 'submitted' || status === 'streaming';
 
     // Voice Recognition Logic
     const toggleListening = () => {
@@ -42,7 +45,7 @@ export default function AIAssistant() {
         recognition.onstart = () => setIsListening(true);
         recognition.onresult = (event: any) => {
             const transcript = event.results[0][0].transcript;
-            handleInputChange({ target: { value: (input || '') + ' ' + transcript } } as any);
+            setInputValue((prev) => (prev + ' ' + transcript).trim());
         };
         recognition.onerror = (event: any) => {
             console.error(event.error);
@@ -87,10 +90,10 @@ export default function AIAssistant() {
                                 <Sparkles className="mx-auto text-teal-300" size={32} />
                                 <p>Merhaba! Size nasıl yardımcı olabilirim?</p>
                                 <div className="grid grid-cols-1 gap-2 mt-4 px-4">
-                                    <button className="text-xs bg-white border p-2 rounded hover:bg-teal-50" onClick={() => handleInputChange({ target: { value: "Bugünkü randevularım?" } } as any)}>
+                                    <button className="text-xs bg-white border p-2 rounded hover:bg-teal-50" onClick={() => setInputValue('Bugünkü randevularım?')}>
                                         "Bugünkü randevularım?"
                                     </button>
-                                    <button className="text-xs bg-white border p-2 rounded hover:bg-teal-50" onClick={() => handleInputChange({ target: { value: "Toplam ciromuz ne kadar?" } } as any)}>
+                                    <button className="text-xs bg-white border p-2 rounded hover:bg-teal-50" onClick={() => setInputValue('Toplam ciromuz ne kadar?')}>
                                         "Toplam ciromuz ne kadar?"
                                     </button>
                                 </div>
@@ -158,14 +161,14 @@ export default function AIAssistant() {
                         ))}
 
                         {error && (
-                            <div className="flex items-center gap-2 text-red-500 text-xs p-2 bg-red-50 rounded">
-                                <AlertCircle size={14} />
-                                <span>
-                                    {/* Try to parse error message if it's JSON string or default fallback */}
-                                    {error.message?.includes('{')
-                                        ? JSON.parse(error.message).details || 'Bir hata oluştu.'
-                                        : 'Yapay zeka servisine ulaşılamıyor (API Key eksik olabilir).'}
-                                </span>
+                            <div className="flex items-start gap-2 text-red-600 text-xs p-3 bg-red-50 border border-red-200 rounded">
+                                <AlertCircle size={14} className="mt-0.5" />
+                                <div>
+                                    <p className="font-semibold">Yapay zeka asistanı şu anda çalışmıyor.</p>
+                                    <p className="mt-1">
+                                        Muhtemel sebep: <code className="bg-red-100 px-1 rounded">GOOGLE_GENERATIVE_AI_API_KEY</code> ayarlı değil veya sunucuya ulaşılamıyor.
+                                    </p>
+                                </div>
                             </div>
                         )}
 
@@ -199,14 +202,18 @@ export default function AIAssistant() {
                             </div>
                         )}
 
-                        <form
+        <form
                             onSubmit={async (e) => {
                                 e.preventDefault();
+
+                                if (!inputValue.trim() && (!files || files.length === 0)) {
+                                    return;
+                                }
 
                                 const currentFiles = files;
                                 setFiles(undefined); // Clear UI immediately
 
-                                let attachments: FileList | undefined | any[] = currentFiles;
+                                let attachments: any[] | undefined = undefined;
 
                                 if (currentFiles && currentFiles.length > 0) {
                                     attachments = await Promise.all(
@@ -216,7 +223,7 @@ export default function AIAssistant() {
                                                 reader.onload = () => resolve({
                                                     name: file.name,
                                                     contentType: file.type,
-                                                    url: reader.result as string
+                                                    url: reader.result as string,
                                                 });
                                                 reader.onerror = reject;
                                                 reader.readAsDataURL(file);
@@ -225,9 +232,12 @@ export default function AIAssistant() {
                                     );
                                 }
 
-                                handleSubmit(e, {
+                                await sendMessage({
+                                    text: inputValue || 'Görsel analiz et',
                                     experimental_attachments: attachments as any,
                                 });
+
+                                setInputValue('');
                             }}
                             className="flex gap-2 items-center"
                         >
@@ -270,14 +280,14 @@ export default function AIAssistant() {
                                 autoComplete="off"
                                 autoCorrect="off"
                                 spellCheck={false}
-                                value={input ?? ''}
-                                onChange={handleInputChange}
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
                                 placeholder="Bir soru sorun..."
                                 className="flex-1 bg-gray-100 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 placeholder:text-gray-500"
                             />
                             <button
                                 type="submit"
-                                disabled={isLoading || (!(input ?? '').trim() && (!files || files.length === 0))}
+                                disabled={isLoading || (!inputValue.trim() && (!files || files.length === 0))}
                                 className="p-2 bg-teal-600 text-white rounded-full hover:bg-teal-700 disabled:opacity-50 transition"
                             >
                                 <Send size={18} />

@@ -143,16 +143,15 @@ export function PatientDetail({
 
                 <div className="flex items-center gap-2 self-end sm:self-start">
                     <PatientReportButton patient={patient} treatments={patient.treatments || []} />
-                    {((currentUser.role === 'admin' || currentUser.role === 'banko' || currentUser.role === 'asistan') ||
-                        (currentUser.role === 'doctor' && patient.doctor_id === currentUser.id)) && (
-                            <button
-                                onClick={() => onEdit(patient)}
-                                className="text-gray-400 hover:text-blue-500 transition p-2"
-                                title="Hasta Bilgilerini Düzenle"
-                            >
-                                <Edit size={20} />
-                            </button>
-                        )}
+                    {hasPermission.editPatient(currentUser.role) && (
+                        <button
+                            onClick={() => onEdit(patient)}
+                            className="text-gray-400 hover:text-blue-500 transition p-2"
+                            title="Hasta Bilgilerini Düzenle"
+                        >
+                            <Edit size={20} />
+                        </button>
+                    )}
                     {canDeletePatient(currentUser, patient) && (
                         <button
                             onClick={() => onDelete(patient.id)}
@@ -171,21 +170,19 @@ export function PatientDetail({
                     <PatientImageGallery patientId={patient.id} currentUser={currentUser} />
                 </div>
 
-                {(hasPermission.addTreatment(currentUser.role) &&
-                    ((currentUser.role === 'admin' || currentUser.role === 'asistan') ||
-                        (currentUser.role === 'doctor' && patient.doctor_id === currentUser.id))) && (
-                        <TreatmentForm
-                            currentUser={currentUser}
-                            selectedPatientId={patient.id}
-                            onSuccess={() => {
-                                toast({ type: 'success', message: 'İşlem kaydedildi!' });
-                                fetchData();
-                            }}
-                            onError={(message) => toast({ type: 'error', message })}
-                            loading={loading}
-                            setLoading={setLoading}
-                        />
-                    )}
+                {hasPermission.addTreatment(currentUser.role) && (
+                    <TreatmentForm
+                        currentUser={currentUser}
+                        selectedPatientId={patient.id}
+                        onSuccess={() => {
+                            toast({ type: 'success', message: 'İşlem kaydedildi!' });
+                            fetchData();
+                        }}
+                        onError={(message) => toast({ type: 'error', message })}
+                        loading={loading}
+                        setLoading={setLoading}
+                    />
+                )}
 
                 {hasPermission.addPayment(currentUser.role) && (
                     <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border mb-6">
@@ -194,7 +191,7 @@ export function PatientDetail({
                             className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition shadow-sm font-medium"
                         >
                             <DollarSign size={20} />
-                            Ödeme Ekle
+                            Ödeme Al / Ekle
                         </button>
                     </div>
                 )}
